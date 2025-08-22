@@ -1,0 +1,3 @@
+package_name = "cleancopywriter"
+package_desc = "Document generation tools for the cleancopy lightweight markup language"
+min_python_version = "3.12"

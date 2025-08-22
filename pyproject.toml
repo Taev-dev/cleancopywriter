@@ -1,0 +1,120 @@
+[project]
+name = "cleancopywriter"
+description = "Document generation tools for the cleancopy lightweight markup language"
+authors = []
+dynamic = ["version"]
+requires-python = ">= 3.12"
+readme = "README.md"
+
+dependencies = [
+]
+
+[dependency-groups]
+test = [
+    "cleancopywriter_testutils",
+    "pytest>=8.4.1",
+]
+
+lint = [
+    "ruff >= 0.3.3",
+]
+
+repl = [
+    "wat-inspector >= 0.3.2"
+]
+
+[tool.uv]
+default-groups = ["test", "lint", "repl"]
+
+[tool.uv.sources]
+cleancopywriter_testutils = { workspace = true }
+
+[tool.uv.workspace]
+members = ["sidecars_py/*"]
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+[tool.pdm.version]
+source = "scm"
+fallback_version = "0.0.0.dev"
+
+[tool.pdm.build]
+package-dir = "src_py"
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = [
+    "tests_py"
+]
+addopts = "--import-mode=importlib"
+cache_dir = '/tmp/pytest_cache'
+python_files = "*.test.py"
+
+[tool.ruff]
+line-length = 79
+
+[tool.ruff.lint]
+dummy-variable-rgx = "^_{1,2}$"
+select = [
+    "F",
+    "E",
+    "W",
+    "C90",
+    "B",
+    "I",
+    "N",
+    "YTT",
+    "S",
+    "A",
+    "C4",
+    "ICN",
+    "Q003",
+    "PLC",
+    "PLE",
+    "PLR",
+    "PLW",
+    "RUF"
+]
+ignore = [
+    "S610",
+    "N818",
+    "PLR5501"
+]
+
+[tool.ruff.lint.isort]
+force-single-line = true
+default-section = "third-party"
+section-order = [
+    "future",
+    "standard-library",
+    "third-party",
+    "first-party",
+    "local-folder",
+    "sidecars",
+]
+known-first-party  = [
+    "cleancopywriter"
+]
+
+[tool.ruff.lint.isort.sections]
+sidecars = [
+    "cleancopywriter_testutils",]
+
+[tool.ruff.lint.pylint]
+max-args = 7
+
+[tool.ruff.lint.per-file-ignores]
+"tests_py/**" = ["S101", "PLR2004", "N999"]
+
+[tool.pyright]
+# See https://github.com/microsoft/pyright/blob/main/docs/configuration.md
+pythonVersion = "3.13"
+pythonPlatform = "Linux"
+# If you run into import issues, see:
+# https://github.com/microsoft/pyright/blob/main/docs/import-resolution.md
+
+reportUnknownVariableType = "information"
+reportUnknownMemberType = "information"
+ 
