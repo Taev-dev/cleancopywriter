@@ -7,5 +7,5 @@ def test_cleancopywriter():
     Mostly useful as a "hello world" e2e test that ensures the CI/CD
     setup runs without issue.
     """
-    import cleancopywriter
+    import cleancopywriter  # noqa: PLC0415, RUF100
     assert isinstance(cleancopywriter, ModuleType)
