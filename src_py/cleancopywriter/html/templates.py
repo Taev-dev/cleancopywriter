@@ -23,7 +23,10 @@ type HtmlTemplate = (
 class HtmlGenericElement:
     tag: Content[str]
     attrs: Slot[HtmlAttr] = field(default_factory=list)
-    body: Slot[HtmlTemplate]
+    # Pyright has an intermittent bug with not recognizing htmltemplate as
+    # a dataclass instance. This probably has something to do with our
+    # missing intersection type.
+    body: Slot[HtmlTemplate]  # type: ignore
 
 
 @template(html, '{content.key}="{var.value}"', loader=_loader)
