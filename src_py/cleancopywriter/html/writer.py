@@ -14,10 +14,14 @@ from cleancopy.ast import InlineNodeInfo
 from cleancopy.ast import LinkTarget
 from cleancopy.ast import List_
 from cleancopy.ast import ListItem
+from cleancopy.ast import MentionDataType
 from cleancopy.ast import Paragraph
+from cleancopy.ast import ReferenceDataType
 from cleancopy.ast import RichtextBlockNode
 from cleancopy.ast import RichtextInlineNode
 from cleancopy.ast import StrDataType
+from cleancopy.ast import TagDataType
+from cleancopy.ast import VariableDataType
 from cleancopy.spectypes import ListType
 from templatey.environments import RenderEnvironment
 from templatey.prebaked.loaders import InlineStringTemplateLoader
@@ -26,6 +30,7 @@ from cleancopywriter.html.factories import formatting_factory
 from cleancopywriter.html.factories import heading_factory
 from cleancopywriter.html.factories import link_factory
 from cleancopywriter.html.factories import listitem_factory
+from cleancopywriter.html.templates import HtmlAttr
 from cleancopywriter.html.templates import HtmlGenericElement
 from cleancopywriter.html.templates import HtmlTemplate
 from cleancopywriter.html.templates import PlaintextTemplate
@@ -34,6 +39,8 @@ from cleancopywriter.writers import DocWriter
 
 @dataclass(slots=True)
 class HtmlWriter(DocWriter[list[HtmlTemplate]]):
+    """
+    """
 
     @singledispatchmethod
     def write_node(self, node: ASTNode) -> list[HtmlTemplate]:
@@ -48,7 +55,11 @@ class HtmlWriter(DocWriter[list[HtmlTemplate]]):
 
         sections.extend(self.write_node(node.root))
 
-        return [HtmlGenericElement(tag='article', body=sections)]
+        return [
+            HtmlGenericElement(
+                tag='clc-doc',
+                body=sections,
+                attrs=[HtmlAttr(key='role', value='article')])]
 
     @write_node.register
     def write_richtext_block(
@@ -67,7 +78,7 @@ class HtmlWriter(DocWriter[list[HtmlTemplate]]):
         # What we're trying to avoid here is **always** having nested sections
         # within a document.
         if node.depth > 0:
-            return [HtmlGenericElement(tag='section', body=body)]
+            return [HtmlGenericElement(tag='clc-block', body=body)]
         else:
             return body
 
@@ -87,7 +98,7 @@ class HtmlWriter(DocWriter[list[HtmlTemplate]]):
                     tag='pre',
                     body=[PlaintextTemplate(text=node.content)]))
 
-        return [HtmlGenericElement(tag='section', body=body)]
+        return [HtmlGenericElement(tag='clc-block', body=body)]
 
     @write_node.register
     def write_paragraph(
@@ -96,9 +107,24 @@ class HtmlWriter(DocWriter[list[HtmlTemplate]]):
             ) -> list[HtmlTemplate]:
         body: list[HtmlTemplate] = []
         for nested in node.content:
-            body.extend(self.write_node(nested))
+            if isinstance(nested, RichtextInlineNode):
+                # We want to wrap these in standard <p> tags, and this is the
+                # only easy place to do so (especially since we use inline
+                # richtext within titles, and <p> isn't valid within <h#>)
+                body.append(
+                    HtmlGenericElement(tag='p', body=self.write_node(nested)))
 
-        return [HtmlGenericElement(tag='p', body=body)]
+            else:
+                body.extend(self.write_node(nested))
+
+        # Notes:
+        #   ++  because we have <ul>/<ol> next to <p> within the same cleancopy
+        #       paragraph, and because both list tags in HTML are invalid
+        #       inside paragraphs, we need to use a custom tag
+        #   ++  this will inherit from HtmlGenericElement, which has the same
+        #       API surface as a normal div
+        #   ++  this can be styled as desired
+        return [HtmlGenericElement(tag='clc-p', body=body)]
 
     @write_node.register
     def write_list_node(
@@ -185,7 +211,22 @@ def _wrap_in_richtext_context(
 def _stringify_link_target(target: LinkTarget) -> str:
     if isinstance(target, StrDataType):
         return target.value
-    else:
-        print(target)
+
+    elif isinstance(target, ReferenceDataType):
+        # TODO: actual implementation
+        return f'#{target.value}'
+
+    elif isinstance(target, MentionDataType):
         raise NotImplementedError(
             'That link target type is not yet supported', target)
+
+    elif isinstance(target, VariableDataType):
+        raise NotImplementedError(
+            'That link target type is not yet supported', target)
+
+    elif isinstance(target, TagDataType):
+        raise NotImplementedError(
+            'That link target type is not yet supported', target)
+
+    else:
+        raise TypeError('Link target was not a link target type!', target)

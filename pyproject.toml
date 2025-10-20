@@ -8,9 +8,9 @@ readme = "README.md"
 
 dependencies = [
     "docnote>=2025.8.5.0",
-    "docnote-extract>=2025.8.21.0",
+    "docnote-extract>=2025.9.15.0",
     "pycleancopy>=2025.8.29.0",
-    "templatey>=2025.8.25.0",
+    "templatey>=2025.10.13.1",
 ]
 
 [dependency-groups]
@@ -24,7 +24,12 @@ lint = [
 ]
 
 repl = [
-    "wat-inspector >= 0.3.2"
+    "anyio>=4.10.0",
+    "fastapi>=0.116.1",
+    "finnr>=2025.9.5.0",
+    "py-spy>=0.4.1",
+    "uvicorn>=0.35.0",
+    "wat-inspector >= 0.3.2",
 ]
 
 [tool.uv]

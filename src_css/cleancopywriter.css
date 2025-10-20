@@ -1,0 +1,281 @@
+/* This is intended as a starting point for anyone wanting to implement
+their own CSS for the output of cleancopywriter. It gives a decent
+overview of what the structure of generated HTML looks like.
+*/
+
+code.clc-fmt-pre {
+    white-space: pre;
+}
+
+clc-ul {
+    text-decoration: underline;
+}
+
+clc-block,
+clc-doc {
+    display: block;
+}
+
+docnote-module {
+    container-type: size;
+}
+
+docnote-module,
+docnote-callable,
+docnote-class,
+docnote-attribute {
+    margin-top: 2em;
+}
+
+docnote-module,
+docnote-callable,
+docnote-callable-signature,
+docnote-class,
+docnote-attribute {
+    display: block flex;
+    flex-direction: column;
+    padding-left: 4ch;
+}
+
+docnote-callable-signature-param,
+docnote-callable > header {
+    display: block flex;
+    flex-direction: column;
+}
+
+docnote-name[obj-type="module"] {
+    font-size: 2em;
+    font-weight: 800;
+}
+
+docnote-name {
+    font-size: 1.2em;
+    font-weight: 600;
+}
+
+docnote-callable-signatures {
+    display: block flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+}
+
+docnote-callable-signature {
+    flex-grow: 1;
+}
+
+docnote-callable-signature-params {
+    display: block flex;
+    flex-direction: column;
+}
+
+docnote-callable > header::before,
+docnote-callable > header::after,
+docnote-tag::before,
+docnote-tag::after,
+docnote-class > header::before,
+docnote-class-metaclass::before,
+docnote-module > header::before {
+    font-size: .9em;
+    font-style: italic;
+    display: block;
+}
+
+docnote-module > header::before {
+    content: "module";
+}
+
+docnote-class > header::before {
+    content: "class";
+}
+
+docnote-class-metaclass:has(> *)::before {
+    content: "metaclass";
+}
+
+docnote-class-bases-container {
+    flex-wrap: wrap;
+    display: inline flex;
+    flex-direction: row;
+}
+
+docnote-class-bases-container::before {
+    align-self: flex-start;
+    content: "(";
+}
+
+docnote-class-bases-container::after {
+    align-self: flex-end;
+    content: ")";
+}
+
+docnote-class-bases {
+    display: block flex;
+    flex-direction: column;
+}
+
+docnote-callable > header > docnote-name::after {
+    font-weight: 400;
+    content: "(...)";
+}
+
+docnote-tag[call-color="async"]::before {
+    content: "async def";
+}
+
+docnote-tag[call-color="sync"]::before {
+    content: "def";
+}
+
+docnote-tag[call-color]::before {
+    order: -1;
+}
+
+docnote-tag[method-type]::before {
+    order: -2;
+}
+
+docnote-tag[generator]::before {
+    order: 1;
+}
+
+docnote-tags,
+docnote-tag {
+    display: contents;
+}
+
+docnote-callable docnote-tag[generator="true"]::before {
+    content: "generator"
+}
+
+docnote-callable:has(> header > docnote-tags > docnote-tag[method-type="classmethod"]) > header::before {
+    content: "@classmethod"
+}
+
+docnote-callable:has(> header > docnote-tags > docnote-tag[method-type="staticmethod"]) > header::before {
+    content: "@staticmethod"
+}
+
+docnote-callable-signature:first-of-type,
+docnote-callable-signature-param:first-of-type {
+    margin-top: .5em;
+    padding-top: 0;
+}
+
+docnote-normtype-params-container {
+    flex-wrap: wrap;
+    display: inline flex;
+    flex-direction: row;
+}
+
+/* Explicitly call out empty generic because you might have a callable with
+no args */
+docnote-normtype-emptygeneric > docnote-normtype-params-container::before,
+docnote-normtype-params-container:has(> docnote-normtype-params > *)::before {
+    align-self: flex-start;
+    content: "[";
+}
+
+/* Explicitly call out empty generic because you might have a callable with
+no args */
+docnote-normtype-emptygeneric > docnote-normtype-params-container::after,
+docnote-normtype-params-container:has(> docnote-normtype-params > *)::after {
+    align-self: flex-end;
+    content: "]";
+}
+
+docnote-normtype-params {
+    display: block flex;
+    flex-direction: column;
+}
+
+docnote-callable-signature {
+    margin-top: 1.5em;
+}
+
+docnote-callable-signature-param-default:has(> docnote-value-repr) {
+    padding-left: 8ch;
+
+    &::before {
+        content: "=";
+    }
+}
+
+docnote-callable-signature-param,
+docnote-callable-signature-retval {
+    margin-top: .5em;
+    padding-top: .5em;
+}
+
+docnote-callable-signature-param::before,
+docnote-callable-signature-retval::before {
+    font-size: .9em;
+    font-style: italic;
+    display: block;
+}
+
+docnote-callable-signature-param[style="pos_only"]::before {
+    content: "positional only";
+}
+
+docnote-callable-signature-param[style="kw_only"]::before {
+    content: "keyword only";
+}
+
+docnote-callable-signature-param[style="pos_starred"]::before {
+    content: "*";
+}
+
+docnote-callable-signature-param[style="kw_starred"]::before {
+    content: "**";
+}
+
+docnote-callable-signature-retval::before {
+    content: "return type";
+}
+
+docnote-callable-signature-retval > header:not(:has(> *))::before {
+    content: "<unknown>";
+}
+
+docnote-callable-signature-param > header,
+docnote-attribute > header {
+    display: block flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: space-between;
+}
+
+docnote-callable-signature-param > header > docnote-typespec,
+docnote-attribute > header > docnote-typespec {
+    min-width: 50ch;
+}
+
+docnote-callable-signature-param > header > docnote-name,
+docnote-attribute > header > docnote-name {
+    min-width: 50%;
+}
+
+docnote-notes {
+    padding-left: 4ch;
+}
+
+docnote-normtype-union-container::before {
+    align-self: flex-start;
+    content: "Union[";
+}
+
+docnote-normtype-union-container::after {
+    align-self: flex-end;
+    content: "]";
+}
+
+docnote-normtype-union-container {
+    flex-wrap: wrap;
+    display: inline flex;
+    flex-direction: row;
+}
+
+docnote-normtype-union {
+    display: block flex;
+    flex-direction: column;
+}
