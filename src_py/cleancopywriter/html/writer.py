@@ -26,20 +26,27 @@ from cleancopy.spectypes import ListType
 from templatey.environments import RenderEnvironment
 from templatey.prebaked.loaders import InlineStringTemplateLoader
 
-from cleancopywriter.html.factories import formatting_factory
-from cleancopywriter.html.factories import heading_factory
-from cleancopywriter.html.factories import link_factory
-from cleancopywriter.html.factories import listitem_factory
 from cleancopywriter.html.templates import HtmlAttr
 from cleancopywriter.html.templates import HtmlGenericElement
 from cleancopywriter.html.templates import HtmlTemplate
 from cleancopywriter.html.templates import PlaintextTemplate
+from cleancopywriter.html.templates import formatting_factory
+from cleancopywriter.html.templates import heading_factory
+from cleancopywriter.html.templates import link_factory
+from cleancopywriter.html.templates import listitem_factory
 from cleancopywriter.writers import DocWriter
 
 
 @dataclass(slots=True)
 class HtmlWriter(DocWriter[list[HtmlTemplate]]):
-    """
+    """This was originally intended as a container class for all of the
+    various transformers and plugins that we wanted to have for
+    processing documents.
+
+    However, we want to move that functionality into the
+    DocumentCollection. Therefore...
+    TODO: remove these from the class and make them just regular
+    singledispatch function(s).
     """
 
     @singledispatchmethod

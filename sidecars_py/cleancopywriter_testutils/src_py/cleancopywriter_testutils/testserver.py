@@ -14,8 +14,8 @@ from fastapi.responses import Response
 from templatey.environments import RenderEnvironment
 from templatey.prebaked.loaders import InlineStringTemplateLoader
 
-from cleancopywriter.html.docnotes import DocnotesTransformer
-from cleancopywriter.html.writer import HtmlWriter
+from cleancopywriter.html.documents import HtmlDocumentCollection
+from cleancopywriter.html.templates import ModuleSummaryTemplate
 
 REPO_ROOT = Path(__file__).parent.parent.parent.parent.parent
 CSS_ROOT = REPO_ROOT / 'src_css'
@@ -49,12 +49,16 @@ async def doc_currency():
 
 
 async def _quickrender(fullname: str) -> HTMLResponse:
-    transformer = DocnotesTransformer(
-        writer=HtmlWriter(),
-        abstractifier=Abstractifier())
-    transformed = transformer.transform(finnr_docnotes)['finnr'][fullname]
+    doccol = HtmlDocumentCollection()
+    package_summary_tree = finnr_docnotes.summaries['finnr']
+    target_module_summary = package_summary_tree.find(fullname).module_summary
+
+    templatified = ModuleSummaryTemplate.from_summary(
+        target_module_summary,
+        doccol)
+
     render_env = RenderEnvironment(InlineStringTemplateLoader(), strict_interpolation_validation=False)
-    rendered = await render_env.render_async(transformed)
+    rendered = await render_env.render_async(templatified)
 
     # cst_doc = parse(clc_text.encode('utf-8'))
     # ast_doc = Abstractifier().convert(cst_doc)
