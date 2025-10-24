@@ -9,17 +9,12 @@ from cleancopy.ast import ASTNode
 from cleancopy.ast import Document
 from cleancopy.ast import EmbeddingBlockNode
 from cleancopy.ast import InlineNodeInfo
-from cleancopy.ast import LinkTarget
 from cleancopy.ast import List_
 from cleancopy.ast import ListItem
-from cleancopy.ast import MentionDataType
 from cleancopy.ast import Paragraph
-from cleancopy.ast import ReferenceDataType
 from cleancopy.ast import RichtextBlockNode
 from cleancopy.ast import RichtextInlineNode
 from cleancopy.ast import StrDataType
-from cleancopy.ast import TagDataType
-from cleancopy.ast import VariableDataType
 from cleancopy.spectypes import InlineFormatting
 from cleancopy.spectypes import ListType
 
@@ -234,7 +229,8 @@ def templatify_richtext_inline(
     else:
         return _wrap_in_richtext_context(
             contained_content,
-            cast(InlineNodeInfo, info))
+            cast(InlineNodeInfo, info),
+            doc_coll=doc_coll)
 
 
 @templatify_node.register
@@ -248,7 +244,9 @@ def templatify_annotation_node(
 
 def _wrap_in_richtext_context(
         contained_content: list[HtmlTemplate],
-        info: InlineNodeInfo
+        info: InlineNodeInfo,
+        *,
+        doc_coll: HtmlDocumentCollection
         ) -> list[HtmlTemplate]:
     if info.formatting is not None:
         contained_content = [formatting_factory(
@@ -258,30 +256,11 @@ def _wrap_in_richtext_context(
     if info.target is None:
         return contained_content
     else:
+        if isinstance(info.target, StrDataType):
+            href = info.target.value
+        else:
+            href = doc_coll.target_resolver(info.target)
+
         return [link_factory(
-            href=_stringify_link_target(info.target),
+            href=href,
             body=contained_content)]
-
-
-def _stringify_link_target(target: LinkTarget) -> str:
-    if isinstance(target, StrDataType):
-        return target.value
-
-    elif isinstance(target, ReferenceDataType):
-        # TODO: actual implementation
-        return f'#{target.value}'
-
-    elif isinstance(target, MentionDataType):
-        raise NotImplementedError(
-            'That link target type is not yet supported', target)
-
-    elif isinstance(target, VariableDataType):
-        raise NotImplementedError(
-            'That link target type is not yet supported', target)
-
-    elif isinstance(target, TagDataType):
-        raise NotImplementedError(
-            'That link target type is not yet supported', target)
-
-    else:
-        raise TypeError('Link target was not a link target type!', target)

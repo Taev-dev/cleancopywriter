@@ -157,14 +157,13 @@ class HtmlDocumentCollection[T: DocumentID](Mapping[T, HtmlDocument]):
         return len(self._documents)
 
     @overload
-    def get(self, key: T, /) -> HtmlDocument | None: ...
+    def get(self, key: T) -> HtmlDocument | None: ...
     @overload
-    def get[TD](self, key: T, /, default: TD) -> TD | HtmlDocument: ...
+    def get[TD](self, key: T, default: TD) -> TD | HtmlDocument: ...
 
     def get[TD](
             self,
             key: T,
-            /,
             default: TD | None = None
             ) ->  TD | HtmlDocument | None:
         return self._documents.get(key, default)

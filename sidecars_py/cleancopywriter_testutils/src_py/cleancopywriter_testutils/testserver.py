@@ -6,6 +6,10 @@ from pathlib import Path
 
 import anyio
 import uvicorn
+from cleancopy.ast import MentionDataType
+from cleancopy.ast import ReferenceDataType
+from cleancopy.ast import TagDataType
+from cleancopy.ast import VariableDataType
 from docnote_extract import gather as gather_docnotes
 from docnote_extract.summaries import ModuleSummary
 from fastapi import FastAPI
@@ -104,9 +108,33 @@ def _make_id(summary: ModuleSummary) -> str:
     return f'docnote({summary.name})'
 
 
+def _resolve_link_target(
+        target:
+            MentionDataType
+            | TagDataType
+            | VariableDataType
+            | ReferenceDataType
+        ) -> str:
+    """In a real-world scenario, the link resolver is responsible for
+    translating the reference namespace to a URL. In practice, you'd
+    probably want this to be a method on a ``Linker`` class or something
+    similar, so that you had a single interface to everything.
+    """
+    if not isinstance(target, ReferenceDataType):
+        raise NotImplementedError('This is just a test...')
+
+    namespace, _, namespace_target = target.value.partition('/')
+
+    if namespace == 'docnote':
+        modname, _, attrname = namespace_target.partition(':')
+        return f'/ccw_docs/docnote({modname})#{attrname}'
+    else:
+        return f'/ccw_docs/handwritten({namespace_target})'
+
+
 def entrypoint():
     doc_coll = HtmlDocumentCollection(
-        target_resolver=lambda *args, **kwargs: '#')
+        target_resolver=_resolve_link_target)
     finnr_docnotes = gather_docnotes(['finnr'])
     package_summary_tree = finnr_docnotes.summaries['finnr']
     for summary_tree_node in package_summary_tree.flatten():

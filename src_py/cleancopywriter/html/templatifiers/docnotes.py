@@ -59,12 +59,6 @@ from cleancopywriter.html.templatifiers.clc import templatify_node
 if typing.TYPE_CHECKING:
     from cleancopywriter.html.documents import HtmlDocumentCollection
 
-type NamespaceItemTemplate = (
-    ModuleSummaryTemplate
-    | VariableSummaryTemplate
-    | ClassSummaryTemplate
-    | CallableSummaryTemplate)
-
 
 @template(
     html,
@@ -993,3 +987,13 @@ def literal_value_factory(
         wraps=[formatting_factory(
             spectype=InlineFormatting.PRE,
             body=[PlaintextTemplate(repr(value))])])
+
+
+# This was running into pyright bugs when being used as a template class;
+# we're putting it at the end of the file in the hopes of fixing them by
+# changing the order of forward refs
+type NamespaceItemTemplate = (
+    ModuleSummaryTemplate
+    | VariableSummaryTemplate
+    | ClassSummaryTemplate
+    | CallableSummaryTemplate)
