@@ -161,10 +161,15 @@ class HtmlDocumentCollection[T: DocumentID](Mapping[T, HtmlDocument]):
     @overload
     def get[TD](self, key: T, /, default: TD) -> TD | HtmlDocument: ...
 
-    def get(self, key: T, /, default: object | None = None):
+    def get[TD](
+            self,
+            key: T,
+            /,
+            default: TD | None = None
+            ) ->  TD | HtmlDocument | None:
         return self._documents.get(key, default)
 
-HtmlDocumentCollection.documents = _ProxyViewDescriptor(
+HtmlDocumentCollection.documents = _ProxyViewDescriptor(  # type: ignore
     view_builder=lambda doc_coll: tuple(doc_coll._documents))  # type: ignore
 
 
