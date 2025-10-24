@@ -15,9 +15,9 @@ from templatey.environments import RenderEnvironment
 from templatey.prebaked.loaders import InlineStringTemplateLoader
 
 from cleancopywriter.html.documents import HtmlDocumentCollection
-from cleancopywriter.html.templates import HtmlAttr
-from cleancopywriter.html.templates import HtmlGenericElement
-from cleancopywriter.html.templates import PlaintextTemplate
+from cleancopywriter.html.generic_templates import HtmlAttr
+from cleancopywriter.html.generic_templates import HtmlGenericElement
+from cleancopywriter.html.generic_templates import PlaintextTemplate
 
 REPO_ROOT = Path(__file__).parent.parent.parent.parent.parent
 CSS_ROOT = REPO_ROOT / 'src_css'
@@ -105,7 +105,8 @@ def _make_id(summary: ModuleSummary) -> str:
 
 
 def entrypoint():
-    doc_coll = HtmlDocumentCollection()
+    doc_coll = HtmlDocumentCollection(
+        target_resolver=lambda *args, **kwargs: '#')
     finnr_docnotes = gather_docnotes(['finnr'])
     package_summary_tree = finnr_docnotes.summaries['finnr']
     for summary_tree_node in package_summary_tree.flatten():

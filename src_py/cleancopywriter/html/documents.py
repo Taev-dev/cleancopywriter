@@ -13,11 +13,14 @@ from cleancopy import parse
 from cleancopy.ast import Document as ClcDocument
 from docnote_extract import SummaryTreeNode
 from templatey._types import TemplateParamsInstance
+from templatey.environments import RenderEnvironment
+from templatey.prebaked.loaders import InlineStringTemplateLoader
 
 from cleancopywriter._types import DocumentBase
 from cleancopywriter._types import DocumentID
-from cleancopywriter.html.templates import ModuleSummaryTemplate
-from cleancopywriter.html.writer import HtmlWriter
+from cleancopywriter._types import LinkTargetResolver
+from cleancopywriter.html.templatifiers.clc import templatify_node
+from cleancopywriter.html.templatifiers.docnotes import ModuleSummaryTemplate
 
 
 @dataclass(slots=True)
@@ -68,9 +71,8 @@ class _ProxyViewDescriptor:
 
 @dataclass(slots=True, kw_only=True)
 class HtmlDocumentCollection[T: DocumentID](Mapping[T, HtmlDocument]):
-    # TODO: need to decide how this should work with other output types
-    # (ie, writers other than html)
-    writer: HtmlWriter = field(default_factory=HtmlWriter)
+    target_resolver: LinkTargetResolver
+
     abstractifier: Abstractifier = field(default_factory=Abstractifier)
 
     _documents: dict[T, HtmlDocument] = field(default_factory=dict, repr=False)
@@ -126,7 +128,7 @@ class HtmlDocumentCollection[T: DocumentID](Mapping[T, HtmlDocument]):
             # all() instead of a simple singular ``is None`` check
             and all(alt_src is None for alt_src in (docnote_src,))
         ):
-            templatified = self.writer.write_document(clc_src)
+            templatified = templatify_node(clc_src, doc_coll=self)
             if len(templatified) != 1:
                 raise RuntimeError(
                     'Impossible branch: multiple root nodes for written clc '
@@ -164,3 +166,17 @@ class HtmlDocumentCollection[T: DocumentID](Mapping[T, HtmlDocument]):
 
 HtmlDocumentCollection.documents = _ProxyViewDescriptor(
     view_builder=lambda doc_coll: tuple(doc_coll._documents))  # type: ignore
+
+
+def quickrender(clc_text: str) -> str:
+    """This is a utility function, mostly intended for manual
+    debugging and repl tomfoolery, that renders the passed cleancopy
+    text into HTML.
+    """
+    doc_coll = HtmlDocumentCollection(
+        target_resolver=lambda *args, **kwargs: '#')
+    cst_doc = parse(clc_text.encode('utf-8'))
+    ast_doc = Abstractifier().convert(cst_doc)
+    templates = templatify_node(ast_doc, doc_coll=doc_coll)
+    render_env = RenderEnvironment(InlineStringTemplateLoader())
+    return render_env.render_sync(templates[0])

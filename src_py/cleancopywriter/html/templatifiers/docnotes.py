@@ -7,13 +7,11 @@ from dataclasses import field
 from dataclasses import fields
 from functools import singledispatch
 from textwrap import dedent
-from typing import Annotated
 from typing import Self
 from typing import overload
 
 from cleancopy.spectypes import InlineFormatting
 from docnote import MarkupLang
-from docnote import Note
 from docnote_extract.crossrefs import CallTraversal
 from docnote_extract.crossrefs import Crossref
 from docnote_extract.crossrefs import CrossrefTraversal
@@ -42,51 +40,30 @@ from docnote_extract.summaries import SignatureSummary
 from docnote_extract.summaries import SummaryMetadataProtocol
 from docnote_extract.summaries import VariableSummary
 from templatey import Content
-from templatey import DynamicClassSlot
 from templatey import Slot
 from templatey import Var
 from templatey import template
-from templatey.prebaked.loaders import InlineStringTemplateLoader
 from templatey.prebaked.template_configs import html
 from templatey.templates import FieldConfig
 from templatey.templates import template_field
 
+from cleancopywriter.html.generic_templates import TEMPLATE_LOADER
+from cleancopywriter.html.generic_templates import HtmlAttr
+from cleancopywriter.html.generic_templates import HtmlGenericElement
+from cleancopywriter.html.generic_templates import HtmlTemplate
+from cleancopywriter.html.generic_templates import PlaintextTemplate
+from cleancopywriter.html.templatifiers.clc import INLINE_PRE_CLASSNAME
+from cleancopywriter.html.templatifiers.clc import formatting_factory
+from cleancopywriter.html.templatifiers.clc import templatify_node
+
 if typing.TYPE_CHECKING:
     from cleancopywriter.html.documents import HtmlDocumentCollection
 
-UNDERLINE_TAGNAME = 'clc-ul'
-INLINE_PRE_CLASSNAME = 'clc-fmt-pre'
-
-
-_loader = InlineStringTemplateLoader()
-type HtmlTemplate = HtmlGenericElement | PlaintextTemplate
 type NamespaceItemTemplate = (
     ModuleSummaryTemplate
     | VariableSummaryTemplate
     | ClassSummaryTemplate
     | CallableSummaryTemplate)
-
-
-@template(
-    html,
-    '<{content.tag}{slot.attrs: __prefix__=" "}>{slot.body}</{content.tag}>',
-    loader=_loader,
-    kw_only=True)
-class HtmlGenericElement:
-    tag: Content[str]
-    attrs: Slot[HtmlAttr] = field(default_factory=list)
-    body: DynamicClassSlot
-
-
-@template(html, '{content.key}="{var.value}"', loader=_loader)
-class HtmlAttr:
-    key: Content[str]
-    value: Var[str]
-
-
-@template(html, '{var.text}', loader=_loader)
-class PlaintextTemplate:
-    text: Var[str]
 
 
 @template(
@@ -98,7 +75,7 @@ class PlaintextTemplate:
         <docnote-fallback-container>
             {slot.wraps}
         </docnote-fallback-container>'''),
-    loader=_loader)
+    loader=TEMPLATE_LOADER)
 class FallbackContainerTemplate:
     """Fallback templates are used for docnote things we haven't fully
     implemented yet, where we want to wrap a generic HTML element in
@@ -125,7 +102,7 @@ class FallbackContainerTemplate:
             {slot.members}
         </docnote-module>
         '''),
-    loader=_loader)
+    loader=TEMPLATE_LOADER)
 class ModuleSummaryTemplate:
     fullname: Var[str]
     docstring: Slot[HtmlGenericElement | PlaintextTemplate]
@@ -154,9 +131,9 @@ class ModuleSummaryTemplate:
             docstring=docstring,
             dunder_all=dunder_all,
             members=[
-                get_template_cls(member).from_summary(member, for_collection)
+                get_template_cls(member).from_summary(member, for_collection)  # type: ignore
                 for member in cls.sort_members(summary_node.members)
-                if should_include(member.metadata)])
+                if should_include(member.metadata)])  # type: ignore
 
     @classmethod
     def sort_members(
@@ -182,7 +159,7 @@ class ModuleSummaryTemplate:
             </docnote-notes>
         </docnote-attribute>
         '''),  # noqa: E501
-    loader=_loader)
+    loader=TEMPLATE_LOADER)
 class VariableSummaryTemplate:
     name: Var[str]
     typespec: Slot[TypespecTemplate]
@@ -232,7 +209,7 @@ class VariableSummaryTemplate:
             {slot.members}
         </docnote-class>
         '''),
-    loader=_loader)
+    loader=TEMPLATE_LOADER)
 class ClassSummaryTemplate:
     name: Var[str]
     metaclass: Slot[NormalizedConcreteTypeTemplate]
@@ -263,9 +240,9 @@ class ClassSummaryTemplate:
                 templatify_concrete_typespec(base)
                 for base in summary_node.bases],
             members=[
-                get_template_cls(member).from_summary(member, for_collection)
+                get_template_cls(member).from_summary(member, for_collection)  # type: ignore
                 for member in cls.sort_members(summary_node.members)
-                if should_include(member.metadata)])
+                if should_include(member.metadata)])  # type: ignore
 
     @classmethod
     def sort_members(
@@ -323,7 +300,7 @@ def _transform_callable_color(value: CallableColor) -> str:
             </docnote-callable-signatures>
         </docnote-callable>
         '''),  # noqa: E501
-    loader=_loader)
+    loader=TEMPLATE_LOADER)
 class CallableSummaryTemplate:
     name: Var[str]
     docstring: Slot[HtmlGenericElement | PlaintextTemplate]
@@ -388,7 +365,7 @@ class CallableSummaryTemplate:
             </docnote-callable-signature-retval>
         </docnote-callable-signature>
         '''),
-    loader=_loader)
+    loader=TEMPLATE_LOADER)
 class SignatureSummaryTemplate:
     params: Slot[ParamSummaryTemplate]
     retval: Slot[RetvalSummaryTemplate]
@@ -448,7 +425,7 @@ def _transform_param_style(value: ParamStyle) -> str:
             </docnote-notes>
         </docnote-callable-signature-param>
         '''),  # noqa: E501
-    loader=_loader)
+    loader=TEMPLATE_LOADER)
 class ParamSummaryTemplate:
     style: Content[ParamStyle] = template_field(FieldConfig(
         transformer=_transform_param_style))
@@ -494,7 +471,7 @@ class ParamSummaryTemplate:
             {slot.notes}
         </docnote-notes>
         '''),
-    loader=_loader)
+    loader=TEMPLATE_LOADER)
 class RetvalSummaryTemplate:
     typespec: Slot[TypespecTemplate]
     notes: Slot[HtmlGenericElement | PlaintextTemplate]
@@ -523,7 +500,7 @@ class RetvalSummaryTemplate:
             {var.reprified_value}
         </docnote-value-repr>
         '''),
-    loader=_loader)
+    loader=TEMPLATE_LOADER)
 class ValueReprTemplate:
     reprified_value: Var[str]
 
@@ -550,7 +527,7 @@ def _transform_tagspec_key(value: str) -> str:
 @template(
     html,
     '<docnote-tag {content.key}="{content.value}"></docnote-tag>',
-    loader=_loader)
+    loader=TEMPLATE_LOADER)
 class TypespecTagTemplate:
     """Typespec tags are used for eg ``ClassVar[...]``, ``Final[...]``,
     etc.
@@ -572,7 +549,7 @@ class TypespecTagTemplate:
                 {slot.typespec_tags}
             </docnote-tags>
         </docnote-typespec>'''),
-    loader=_loader)
+    loader=TEMPLATE_LOADER)
 class TypespecTemplate:
     normtype: Slot[NormalizedTypeTemplate]
     typespec_tags: Slot[TypespecTagTemplate]
@@ -589,7 +566,7 @@ class TypespecTemplate:
                 {slot.normtypes}
             </docnote-normtype-union>
         </docnote-normtype-union-container>'''),
-    loader=_loader)
+    loader=TEMPLATE_LOADER)
 class NormalizedUnionTypeTemplate:
     normtypes: Slot[NormalizedTypeTemplate]
 
@@ -607,7 +584,7 @@ class NormalizedUnionTypeTemplate:
                 </docnote-normtype-params>
             </docnote-normtype-params-container>
         </docnote-normtype-concrete>'''),
-    loader=_loader)
+    loader=TEMPLATE_LOADER)
 class NormalizedConcreteTypeTemplate:
     primary: Slot[CrossrefSummaryTemplate]
     params: Slot[NormalizedTypeTemplate]
@@ -623,7 +600,7 @@ class NormalizedConcreteTypeTemplate:
                 </docnote-normtype-params>
             </docnote-normtype-params-container>
         </docnote-normtype-emptygeneric>'''),
-    loader=_loader)
+    loader=TEMPLATE_LOADER)
 class NormalizedEmptyGenericTypeTemplate:
     params: Slot[NormalizedTypeTemplate]
 
@@ -634,7 +611,7 @@ class NormalizedEmptyGenericTypeTemplate:
         <docnote-normtype-specialform>
             {slot.type_}
         </docnote-normtype-specialform>'''),
-    loader=_loader)
+    loader=TEMPLATE_LOADER)
 class NormalizedSpecialTypeTemplate:
     type_: Slot[CrossrefSummaryTemplate]
 
@@ -648,7 +625,7 @@ class NormalizedSpecialTypeTemplate:
         <docnote-normtype-literal>
             {slot.values}
         </docnote-normtype-literal>'''),
-    loader=_loader)
+    loader=TEMPLATE_LOADER)
 class NormalizedLiteralTypeTemplate:
     values: Slot[FallbackContainerTemplate | CrossrefSummaryTemplate]
 
@@ -660,7 +637,7 @@ class NormalizedLiteralTypeTemplate:
             {slot.crossref_target}
         </abbr>
         '''),
-    loader=_loader)
+    loader=TEMPLATE_LOADER)
 class CrossrefSummaryTemplate:
     qualname: Var[str]
     traversals: Var[str | None] = field(default=None, kw_only=True)
@@ -706,7 +683,7 @@ class CrossrefSummaryTemplate:
 @template(
     html,
     '<a href="{var.target}">{slot.text}</a>',
-    loader=_loader)
+    loader=TEMPLATE_LOADER)
 class CrossrefLinkTemplate:
     target: Var[str]
     text: Slot[CrossrefTextTemplate]
@@ -721,7 +698,7 @@ class CrossrefLinkTemplate:
 @template(
     html,
     '{var.shortname}{content.has_traversals}',
-    loader=_loader)
+    loader=TEMPLATE_LOADER)
 class CrossrefTextTemplate:
     shortname: Var[str]
     has_traversals: Content[bool] = template_field(
@@ -753,7 +730,7 @@ def templatify_doctext(
             'Unsupported markup language for doctext!', doctext)
 
     ast_doc = for_collection.preprocess(clc_text=doctext.value)
-    return for_collection.writer.write_node(ast_doc)
+    return templatify_node(ast_doc, doc_coll=for_collection)
 
 
 def templatify_concrete_typespec(
@@ -930,90 +907,6 @@ def _flatten_typespec_traversals(
         raise TypeError('Invalid traversal type for typespec!', this_traversal)
 
     yield from _flatten_typespec_traversals(traversals, _index=_index + 1)
-
-
-
-
-def link_factory(
-        body: list[HtmlTemplate],
-        href: str,
-        ) -> HtmlGenericElement:
-    return HtmlGenericElement(
-        tag='a',
-        attrs=[HtmlAttr(key='href', value=href)],
-        body=body)
-
-
-def heading_factory(
-        depth: Annotated[int, Note('Note: zero-indexed!')],
-        body: list[HtmlTemplate]
-        ) -> HtmlGenericElement:
-    """Beyond what you'd expect, this:
-    ++  converts a zero-indexed depth to a 1-indexed heading
-    ++  clamps the value to the allowable HTML range [1, 6]
-    """
-    if depth < 0:
-        heading_level = 1
-    elif depth > 5:  # noqa: PLR2004
-        heading_level = 6
-    elif type(depth) is not int:
-        heading_level = int(depth) + 1
-    else:
-        heading_level = depth + 1
-
-    return HtmlGenericElement(
-        tag=f'h{heading_level}',
-        body=body)
-
-
-def formatting_factory(
-        spectype: InlineFormatting,
-        body: list[HtmlTemplate]
-        ) -> HtmlGenericElement:
-    if spectype is InlineFormatting.PRE:
-        tag = 'code'
-        attrs = [HtmlAttr(key='class', value=INLINE_PRE_CLASSNAME)]
-
-    elif spectype is InlineFormatting.UNDERLINE:
-        tag = UNDERLINE_TAGNAME
-        attrs = []
-
-    elif spectype is InlineFormatting.STRONG:
-        tag = 'strong'
-        attrs = []
-
-    elif spectype is InlineFormatting.EMPHASIS:
-        tag = 'em'
-        attrs = []
-
-    elif spectype is InlineFormatting.STRIKE:
-        tag = 's'
-        attrs = []
-
-    else:
-        raise TypeError(
-            'Invalid spectype for inline formatting!', spectype)
-
-    return HtmlGenericElement(
-        tag=tag,
-        attrs=attrs,
-        body=body)
-
-
-def listitem_factory(
-        index: int | None,
-        body: list[HtmlTemplate]
-        ) -> HtmlGenericElement:
-    """Convenience wrapper to set explicit values on ordered lists."""
-    if index is None:
-        attrs = []
-
-    else:
-        if type(index) is not int:
-            index = int(index)
-        attrs = [HtmlAttr(key='value', value=str(index))]
-
-    return HtmlGenericElement(tag='li', attrs=attrs, body=body)
 
 
 def dunder_all_factory(
