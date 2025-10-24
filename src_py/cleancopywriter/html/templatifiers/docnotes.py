@@ -101,7 +101,9 @@ class ModuleSummaryTemplate:
     fullname: Var[str]
     docstring: Slot[HtmlGenericElement | PlaintextTemplate]
     dunder_all: Slot[HtmlGenericElement]
-    members: Slot[NamespaceItemTemplate]
+    # There's a bug somewhere in pyright that's saying ModuleSummaryTemplate
+    # isn't actually a template params instance.
+    members: Slot[NamespaceItemTemplate]  # type: ignore
 
     @classmethod
     def from_summary(
@@ -209,7 +211,9 @@ class ClassSummaryTemplate:
     metaclass: Slot[NormalizedConcreteTypeTemplate]
     bases: Slot[NormalizedConcreteTypeTemplate]
     docstring: Slot[HtmlGenericElement | PlaintextTemplate]
-    members: Slot[NamespaceItemTemplate]
+    # There's a bug somewhere in pyright that's saying ModuleSummaryTemplate
+    # isn't actually a template params instance.
+    members: Slot[NamespaceItemTemplate]  # type: ignore
 
     @classmethod
     def from_summary(
