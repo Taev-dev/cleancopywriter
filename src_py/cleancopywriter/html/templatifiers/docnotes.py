@@ -82,7 +82,7 @@ class FallbackContainerTemplate:
     html,
     dedent('''\
         <docnote-module role="article">
-            <header>
+            <docnote-header>
                 <docnote-name obj-type="module" role="heading" aria-level="1">
                     {var.fullname}
                 </docnote-name>
@@ -92,7 +92,7 @@ class FallbackContainerTemplate:
                 <docnote-module-dunderall role="list">
                     {slot.dunder_all}
                 </docnote-module-dunderall>
-            </header>
+            </docnote-header>
             {slot.members}
         </docnote-module>
         '''),
@@ -144,12 +144,12 @@ class ModuleSummaryTemplate:
     html,
     dedent('''\
         <docnote-attribute>
-            <header>
+            <docnote-header>
                 <docnote-name obj-type="attribute" role="heading" aria-level="2">
                     {var.name}
                 </docnote-name>
                 {slot.typespec}
-            </header>
+            </docnote-header>
             <docnote-notes>
                 {slot.notes}
             </docnote-notes>
@@ -186,7 +186,7 @@ class VariableSummaryTemplate:
     html,
     dedent('''\
         <docnote-class>
-            <header>
+            <docnote-header>
                 <docnote-name obj-type="class" role="heading" aria-level="2">
                     {var.name}
                 </docnote-name>
@@ -203,7 +203,7 @@ class VariableSummaryTemplate:
                 <docnote-docstring obj-type="class">
                     {slot.docstring}
                 </docnote-docstring>
-            </header>
+            </docnote-header>
             {slot.members}
         </docnote-class>
         '''),
@@ -282,7 +282,7 @@ def _transform_callable_color(value: CallableColor) -> str:
     html,
     dedent('''\
         <docnote-callable>
-            <header>
+            <docnote-header>
                 <docnote-name obj-type="callable" role="heading" aria-level="2">
                     {var.name}
                 </docnote-name>
@@ -294,7 +294,7 @@ def _transform_callable_color(value: CallableColor) -> str:
                     <docnote-tag {content.method_type}></docnote-tag>
                     <docnote-tag {content.is_generator}></docnote-tag>
                 </docnote-tags>
-            </header>
+            </docnote-header>
             <docnote-callable-signatures>
                 {slot.signatures}
             </docnote-callable-signatures>
@@ -352,11 +352,11 @@ class CallableSummaryTemplate:
     html,
     dedent('''\
         <docnote-callable-signature>
-            <header>
+            <docnote-header>
                 <docnote-docstring obj-type="callable-signature">
                     {slot.docstring}
                 </docnote-docstring>
-            </header>
+            </docnote-header>
             <docnote-callable-signature-params role="list">
                 {slot.params}
             </docnote-callable-signature-params>
@@ -411,12 +411,12 @@ def _transform_param_style(value: ParamStyle) -> str:
     html,
     dedent('''\
         <docnote-callable-signature-param {content.style} role="listitem">
-            <header>
+            <docnote-header>
                 <docnote-name obj-type="callable-signature-param-item" role="heading" aria-level="3">
                     {var.name}
                 </docnote-name>
                 {slot.typespec}
-            </header>
+            </docnote-header>
             <docnote-callable-signature-param-default>
                 {slot.default}
             </docnote-callable-signature-param-default>
@@ -466,9 +466,9 @@ class ParamSummaryTemplate:
     # Note: the parent signature is responsible for wrapping this in the retval
     # container tag.
     dedent('''\
-        <header>
+        <docnote-header>
             {slot.typespec}
-        </header>
+        </docnote-header>
         <docnote-notes>
             {slot.notes}
         </docnote-notes>
