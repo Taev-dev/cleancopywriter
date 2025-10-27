@@ -48,5 +48,4 @@ class TestHtmlWriter:
         """
         result = quickrender(clc_text)
 
-        print(repr(result))
         assert result == expected_render_result
