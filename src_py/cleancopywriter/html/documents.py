@@ -457,8 +457,8 @@ def quickrender(clc_text: str) -> str:
     """
     doc_coll = HtmlDocumentCollection(
         target_resolver=lambda *args, **kwargs: '#')
-    cst_doc = parse(clc_text.encode('utf-8'))
-    ast_doc = Abstractifier().convert(cst_doc)
-    templates = templatify_node(ast_doc, doc_coll=doc_coll)
+    ast_doc = doc_coll.preprocess(clc_text=clc_text)
+    template = ClcRichtextBlocknodeTemplate.from_document(
+        ast_doc, doc_coll=doc_coll)
     render_env = RenderEnvironment(InlineStringTemplateLoader())
-    return render_env.render_sync(templates[0])
+    return render_env.render_sync(template)

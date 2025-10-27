@@ -53,8 +53,8 @@ from cleancopywriter.html.generic_templates import HtmlGenericElement
 from cleancopywriter.html.generic_templates import HtmlTemplate
 from cleancopywriter.html.generic_templates import PlaintextTemplate
 from cleancopywriter.html.templatifiers.clc import INLINE_PRE_CLASSNAME
+from cleancopywriter.html.templatifiers.clc import ClcRichtextBlocknodeTemplate
 from cleancopywriter.html.templatifiers.clc import formatting_factory
-from cleancopywriter.html.templatifiers.clc import templatify_node
 
 if typing.TYPE_CHECKING:
     from cleancopywriter.html.documents import HtmlDocumentCollection
@@ -99,7 +99,7 @@ class FallbackContainerTemplate:
     loader=TEMPLATE_LOADER)
 class ModuleSummaryTemplate:
     fullname: Var[str]
-    docstring: Slot[HtmlGenericElement | PlaintextTemplate]
+    docstring: Slot[HtmlTemplate | ClcRichtextBlocknodeTemplate]
     dunder_all: Slot[HtmlGenericElement]
     # There's a bug somewhere in pyright that's saying ModuleSummaryTemplate
     # isn't actually a template params instance.
@@ -109,13 +109,13 @@ class ModuleSummaryTemplate:
     def from_summary(
             cls,
             summary_node: ModuleSummary,
-            for_collection: HtmlDocumentCollection
+            doc_coll: HtmlDocumentCollection
             ) -> Self:
         if summary_node.docstring is None:
             docstring = []
         else:
             docstring = templatify_doctext(
-                summary_node.docstring, for_collection)
+                summary_node.docstring, doc_coll, summary_node.metadata)
 
         if summary_node.dunder_all is None:
             dunder_all = []
@@ -127,7 +127,7 @@ class ModuleSummaryTemplate:
             docstring=docstring,
             dunder_all=dunder_all,
             members=[
-                get_template_cls(member).from_summary(member, for_collection)  # type: ignore
+                get_template_cls(member).from_summary(member, doc_coll)  # type: ignore
                 for member in cls.sort_members(summary_node.members)
                 if should_include(member.metadata)])  # type: ignore
 
@@ -159,17 +159,19 @@ class ModuleSummaryTemplate:
 class VariableSummaryTemplate:
     name: Var[str]
     typespec: Slot[TypespecTemplate]
-    notes: Slot[HtmlGenericElement | PlaintextTemplate]
+    notes: Slot[ClcRichtextBlocknodeTemplate | HtmlTemplate]
 
     @classmethod
     def from_summary(
             cls,
             summary_node: VariableSummary,
-            for_collection: HtmlDocumentCollection
+            doc_coll: HtmlDocumentCollection
             ) -> Self:
-        rendered_notes: list[HtmlTemplate] = []
+        rendered_notes: list[ClcRichtextBlocknodeTemplate | HtmlTemplate] = []
         for note in summary_node.notes:
-            rendered_notes.extend(templatify_doctext(note, for_collection))
+            rendered_notes.extend(
+                templatify_doctext(
+                    note, doc_coll, summary_node.metadata))
 
         return cls(
             name=summary_node.name,
@@ -210,7 +212,7 @@ class ClassSummaryTemplate:
     name: Var[str]
     metaclass: Slot[NormalizedConcreteTypeTemplate]
     bases: Slot[NormalizedConcreteTypeTemplate]
-    docstring: Slot[HtmlGenericElement | PlaintextTemplate]
+    docstring: Slot[HtmlTemplate | ClcRichtextBlocknodeTemplate]
     # There's a bug somewhere in pyright that's saying ModuleSummaryTemplate
     # isn't actually a template params instance.
     members: Slot[NamespaceItemTemplate]  # type: ignore
@@ -219,13 +221,13 @@ class ClassSummaryTemplate:
     def from_summary(
             cls,
             summary_node: ClassSummary,
-            for_collection: HtmlDocumentCollection
+            doc_coll: HtmlDocumentCollection
             ) -> Self:
         if summary_node.docstring is None:
             docstring = []
         else:
             docstring = templatify_doctext(
-                summary_node.docstring, for_collection)
+                summary_node.docstring, doc_coll, summary_node.metadata)
 
         return cls(
             name=summary_node.name,
@@ -238,7 +240,7 @@ class ClassSummaryTemplate:
                 templatify_concrete_typespec(base)
                 for base in summary_node.bases],
             members=[
-                get_template_cls(member).from_summary(member, for_collection)  # type: ignore
+                get_template_cls(member).from_summary(member, doc_coll)  # type: ignore
                 for member in cls.sort_members(summary_node.members)
                 if should_include(member.metadata)])  # type: ignore
 
@@ -301,7 +303,7 @@ def _transform_callable_color(value: CallableColor) -> str:
     loader=TEMPLATE_LOADER)
 class CallableSummaryTemplate:
     name: Var[str]
-    docstring: Slot[HtmlGenericElement | PlaintextTemplate]
+    docstring: Slot[HtmlTemplate | ClcRichtextBlocknodeTemplate]
 
     color: Content[CallableColor] = template_field(FieldConfig(
         transformer=_transform_callable_color))
@@ -316,13 +318,13 @@ class CallableSummaryTemplate:
     def from_summary(
             cls,
             summary_node: CallableSummary,
-            for_collection: HtmlDocumentCollection
+            doc_coll: HtmlDocumentCollection
             ) -> Self:
         if summary_node.docstring is None:
             docstring = []
         else:
             docstring = templatify_doctext(
-                summary_node.docstring, for_collection)
+                summary_node.docstring, doc_coll, summary_node.metadata)
 
         return cls(
             name=summary_node.name,
@@ -332,7 +334,7 @@ class CallableSummaryTemplate:
             is_generator=summary_node.is_generator,
             signatures=[
                 SignatureSummaryTemplate.from_summary(
-                    signature, for_collection)
+                    signature, doc_coll)
                 for signature in cls.sort_signatures(summary_node.signatures)
                 if should_include(signature.metadata)])
 
@@ -367,28 +369,28 @@ class CallableSummaryTemplate:
 class SignatureSummaryTemplate:
     params: Slot[ParamSummaryTemplate]
     retval: Slot[RetvalSummaryTemplate]
-    docstring: Slot[HtmlGenericElement | PlaintextTemplate]
+    docstring: Slot[HtmlTemplate | ClcRichtextBlocknodeTemplate]
 
     @classmethod
     def from_summary(
             cls,
             summary_node: SignatureSummary,
-            for_collection: HtmlDocumentCollection
+            doc_coll: HtmlDocumentCollection
             ) -> Self:
         if summary_node.docstring is None:
             docstring = []
         else:
             docstring = templatify_doctext(
-                summary_node.docstring, for_collection)
+                summary_node.docstring, doc_coll, summary_node.metadata)
 
         return cls(
             params=[
-                ParamSummaryTemplate.from_summary(param, for_collection)
+                ParamSummaryTemplate.from_summary(param, doc_coll)
                 for param in cls.sort_params(summary_node.params)
                 if should_include(param.metadata)],
             retval=[
                 RetvalSummaryTemplate.from_summary(
-                    summary_node.retval, for_collection)],
+                    summary_node.retval, doc_coll)],
             docstring=docstring)
 
     @classmethod
@@ -430,17 +432,19 @@ class ParamSummaryTemplate:
     name: Var[str]
     typespec: Slot[TypespecTemplate]
     default: Slot[ValueReprTemplate]
-    notes: Slot[HtmlGenericElement | PlaintextTemplate]
+    notes: Slot[HtmlTemplate | ClcRichtextBlocknodeTemplate]
 
     @classmethod
     def from_summary(
             cls,
             summary_node: ParamSummary,
-            for_collection: HtmlDocumentCollection
+            doc_coll: HtmlDocumentCollection
             ) -> Self:
-        rendered_notes: list[HtmlTemplate] = []
+        rendered_notes: list[HtmlTemplate | ClcRichtextBlocknodeTemplate] = []
         for note in summary_node.notes:
-            rendered_notes.extend(templatify_doctext(note, for_collection))
+            rendered_notes.extend(
+                templatify_doctext(
+                    note, doc_coll, summary_node.metadata))
 
         rendered_default: list[ValueReprTemplate] = []
         if summary_node.default is not None:
@@ -472,17 +476,19 @@ class ParamSummaryTemplate:
     loader=TEMPLATE_LOADER)
 class RetvalSummaryTemplate:
     typespec: Slot[TypespecTemplate]
-    notes: Slot[HtmlGenericElement | PlaintextTemplate]
+    notes: Slot[HtmlTemplate | ClcRichtextBlocknodeTemplate]
 
     @classmethod
     def from_summary(
             cls,
             summary_node: RetvalSummary,
-            for_collection: HtmlDocumentCollection
+            doc_coll: HtmlDocumentCollection
             ) -> Self:
-        rendered_notes: list[HtmlTemplate] = []
+        rendered_notes: list[HtmlTemplate | ClcRichtextBlocknodeTemplate] = []
         for note in summary_node.notes:
-            rendered_notes.extend(templatify_doctext(note, for_collection))
+            rendered_notes.extend(
+                templatify_doctext(
+                    note, doc_coll, summary_node.metadata))
 
         return cls(
             typespec=[templatify_typespec(summary_node.typespec)]
@@ -670,7 +676,7 @@ class CrossrefSummaryTemplate:
     def from_summary(
             cls,
             summary_node: CrossrefSummary,
-            for_collection: HtmlDocumentCollection
+            doc_coll: HtmlDocumentCollection
             ) -> Self:
         if summary_node.crossref is None:
             raise ValueError('Cannot templatify a nonexistent crossref!')
@@ -706,8 +712,9 @@ class CrossrefTextTemplate:
 
 def templatify_doctext(
         doctext: DocText,
-        for_collection: HtmlDocumentCollection,
-        ) -> list[HtmlTemplate]:
+        doc_coll: HtmlDocumentCollection,
+        summary_metadata: SummaryMetadataProtocol,
+        ) -> list[HtmlTemplate | ClcRichtextBlocknodeTemplate]:
     if doctext.markup_lang is None:
         return [
             HtmlGenericElement(
@@ -727,8 +734,11 @@ def templatify_doctext(
         raise ValueError(
             'Unsupported markup language for doctext!', doctext)
 
-    ast_doc = for_collection.preprocess(clc_text=doctext.value)
-    return templatify_node(ast_doc, doc_coll=for_collection)
+    ast_doc = doc_coll.preprocess(
+        clc_text=doctext.value,
+        context=summary_metadata)
+    return [ClcRichtextBlocknodeTemplate.from_document(
+        ast_doc, doc_coll=doc_coll)]
 
 
 def templatify_concrete_typespec(
