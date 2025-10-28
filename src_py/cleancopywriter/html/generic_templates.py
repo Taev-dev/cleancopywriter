@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import typing
+from collections.abc import Sequence
 from dataclasses import field
 from typing import Annotated
 
@@ -11,11 +11,9 @@ from templatey import DynamicClassSlot
 from templatey import Slot
 from templatey import Var
 from templatey import template
+from templatey._types import TemplateParamsInstance
 from templatey.prebaked.loaders import InlineStringTemplateLoader
 from templatey.prebaked.template_configs import html
-
-if typing.TYPE_CHECKING:
-    pass
 
 TEMPLATE_LOADER: Annotated[
         InlineStringTemplateLoader,
@@ -47,7 +45,7 @@ class PlaintextTemplate:
 
 
 def link_factory(
-        body: list[HtmlTemplate],
+        body: Sequence[TemplateParamsInstance],
         href: str,
         ) -> HtmlGenericElement:
     return HtmlGenericElement(
@@ -58,7 +56,7 @@ def link_factory(
 
 def heading_factory(
         depth: Annotated[int, Note('Note: zero-indexed!')],
-        body: list[HtmlTemplate]
+        body: Sequence[TemplateParamsInstance]
         ) -> HtmlGenericElement:
     """Beyond what you'd expect, this:
     ++  converts a zero-indexed depth to a 1-indexed heading
@@ -76,19 +74,3 @@ def heading_factory(
     return HtmlGenericElement(
         tag=f'h{heading_level}',
         body=body)
-
-
-def listitem_factory(
-        index: int | None,
-        body: list[HtmlTemplate]
-        ) -> HtmlGenericElement:
-    """Convenience wrapper to set explicit values on ordered lists."""
-    if index is None:
-        attrs = []
-
-    else:
-        if type(index) is not int:
-            index = int(index)
-        attrs = [HtmlAttr(key='value', value=str(index))]
-
-    return HtmlGenericElement(tag='li', attrs=attrs, body=body)

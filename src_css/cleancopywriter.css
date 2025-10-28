@@ -12,7 +12,8 @@ clc-ul {
 }
 
 clc-block,
-clc-doc {
+clc-doc,
+clc-p {
     display: block;
 }
 
@@ -38,7 +39,7 @@ docnote-attribute {
 }
 
 docnote-callable-signature-param,
-docnote-callable > header {
+docnote-callable > docnote-header {
     display: block flex;
     flex-direction: column;
 }
@@ -68,23 +69,23 @@ docnote-callable-signature-params {
     flex-direction: column;
 }
 
-docnote-callable > header::before,
-docnote-callable > header::after,
+docnote-callable > docnote-header::before,
+docnote-callable > docnote-header::after,
 docnote-tag::before,
 docnote-tag::after,
-docnote-class > header::before,
+docnote-class > docnote-header::before,
 docnote-class-metaclass::before,
-docnote-module > header::before {
+docnote-module > docnote-header::before {
     font-size: .9em;
     font-style: italic;
     display: block;
 }
 
-docnote-module > header::before {
+docnote-module > docnote-header::before {
     content: "module";
 }
 
-docnote-class > header::before {
+docnote-class > docnote-header::before {
     content: "class";
 }
 
@@ -113,7 +114,7 @@ docnote-class-bases {
     flex-direction: column;
 }
 
-docnote-callable > header > docnote-name::after {
+docnote-callable > docnote-header > docnote-name::after {
     font-weight: 400;
     content: "(...)";
 }
@@ -147,11 +148,11 @@ docnote-callable docnote-tag[generator="true"]::before {
     content: "generator"
 }
 
-docnote-callable:has(> header > docnote-tags > docnote-tag[method-type="classmethod"]) > header::before {
+docnote-callable:has(> docnote-header > docnote-tags > docnote-tag[method-type="classmethod"]) > docnote-header::before {
     content: "@classmethod"
 }
 
-docnote-callable:has(> header > docnote-tags > docnote-tag[method-type="staticmethod"]) > header::before {
+docnote-callable:has(> docnote-header > docnote-tags > docnote-tag[method-type="staticmethod"]) > docnote-header::before {
     content: "@staticmethod"
 }
 
@@ -233,25 +234,25 @@ docnote-callable-signature-retval::before {
     content: "return type";
 }
 
-docnote-callable-signature-retval > header:not(:has(> *))::before {
+docnote-callable-signature-retval > docnote-header:not(:has(> *))::before {
     content: "<unknown>";
 }
 
-docnote-callable-signature-param > header,
-docnote-attribute > header {
+docnote-callable-signature-param > docnote-header,
+docnote-attribute > docnote-header {
     display: block flex;
     flex-direction: row;
     flex-wrap: wrap;
     justify-content: space-between;
 }
 
-docnote-callable-signature-param > header > docnote-typespec,
-docnote-attribute > header > docnote-typespec {
+docnote-callable-signature-param > docnote-header > docnote-typespec,
+docnote-attribute > docnote-header > docnote-typespec {
     min-width: 50ch;
 }
 
-docnote-callable-signature-param > header > docnote-name,
-docnote-attribute > header > docnote-name {
+docnote-callable-signature-param > docnote-header > docnote-name,
+docnote-attribute > docnote-header > docnote-name {
     min-width: 50%;
 }
 

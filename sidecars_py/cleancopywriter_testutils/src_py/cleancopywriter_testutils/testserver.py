@@ -3,15 +3,21 @@ from __future__ import annotations
 from contextvars import ContextVar
 from inspect import cleandoc
 from pathlib import Path
+from typing import cast
 
 import anyio
 import uvicorn
+from cleancopy.ast import ASTNode
+from cleancopy.ast import InlineNodeInfo
 from cleancopy.ast import MentionDataType
 from cleancopy.ast import ReferenceDataType
+from cleancopy.ast import RichtextInlineNode
 from cleancopy.ast import TagDataType
 from cleancopy.ast import VariableDataType
+from cleancopy.spectypes import InlineFormatting
 from docnote_extract import gather as gather_docnotes
 from docnote_extract.summaries import ModuleSummary
+from docnote_extract.summaries import SummaryMetadataProtocol
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.responses import Response
@@ -132,9 +138,44 @@ def _resolve_link_target(
         return f'/ccw_docs/handwritten({namespace_target})'
 
 
+def _transform_clc_node(
+        node: ASTNode,
+        *,
+        context: SummaryMetadataProtocol | None = None
+        ) -> ASTNode:
+    if (
+        # Makes typechecking happy
+        context is None
+        # Defensive in case we widen the supported contexts
+        or not hasattr(context, 'crossref_namespace')
+        or not isinstance(node, RichtextInlineNode)
+        or node.info is None
+        or node.info.formatting is not InlineFormatting.PRE
+        or len(node.content) != 1
+        or not isinstance(node.content[0], str)
+    ):
+        return node
+
+    maybe_reference, = cast(str, node.content)
+    crossref = context.crossref_namespace.get(maybe_reference)
+    if crossref is None:
+        return node
+
+    return RichtextInlineNode(
+        info=InlineNodeInfo(
+            target=ReferenceDataType(
+                value=
+                    # TODO: in a real application this would need to handle
+                    # traversals!
+                    f'docnote/{crossref.module_name}:{crossref.toplevel_name}'
+                    )),
+        content=[node])
+
+
 def entrypoint():
     doc_coll = HtmlDocumentCollection(
-        target_resolver=_resolve_link_target)
+        target_resolver=_resolve_link_target,
+        transformers=[_transform_clc_node])
     finnr_docnotes = gather_docnotes(['finnr'])
     package_summary_tree = finnr_docnotes.summaries['finnr']
     for summary_tree_node in package_summary_tree.flatten():

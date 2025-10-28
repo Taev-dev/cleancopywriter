@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import typing
-from functools import singledispatch
+from textwrap import dedent
+from typing import Self
 from typing import cast
 
 from cleancopy.ast import Annotation
-from cleancopy.ast import ASTNode
-from cleancopy.ast import Document
+from cleancopy.ast import Document as ClcDocument
 from cleancopy.ast import EmbeddingBlockNode
 from cleancopy.ast import InlineNodeInfo
 from cleancopy.ast import List_
@@ -17,14 +17,21 @@ from cleancopy.ast import RichtextInlineNode
 from cleancopy.ast import StrDataType
 from cleancopy.spectypes import InlineFormatting
 from cleancopy.spectypes import ListType
+from templatey import Content
+from templatey import Slot
+from templatey import Var
+from templatey import template
+from templatey.prebaked.template_configs import html
+from templatey.templates import FieldConfig
+from templatey.templates import template_field
 
+from cleancopywriter.html.generic_templates import TEMPLATE_LOADER
 from cleancopywriter.html.generic_templates import HtmlAttr
 from cleancopywriter.html.generic_templates import HtmlGenericElement
 from cleancopywriter.html.generic_templates import HtmlTemplate
 from cleancopywriter.html.generic_templates import PlaintextTemplate
 from cleancopywriter.html.generic_templates import heading_factory
 from cleancopywriter.html.generic_templates import link_factory
-from cleancopywriter.html.generic_templates import listitem_factory
 
 if typing.TYPE_CHECKING:
     from cleancopywriter.html.documents import HtmlDocumentCollection
@@ -33,13 +40,361 @@ else:
     # document collection isn't defined
     HtmlDocumentCollection = object
 
-UNDERLINE_TAGNAME = 'clc-ul'
 INLINE_PRE_CLASSNAME = 'clc-fmt-pre'
+UNDERLINE_TAGNAME = 'clc-ul'
+
+
+@template(
+    html,
+    '<clc-metadata type="{content.type_}" key="{var.key}" value="{var.value}">'
+    + '</clc-metadata>',
+    loader=TEMPLATE_LOADER)
+class ClcMetadataTemplate:
+    """This template is used for individual metadata key/value pairs.
+    """
+    type_: Content[str]
+    key: Var[object]
+    value: Var[object]
+
+
+def _transform_block_role(value: bool) -> str:
+    if value:
+        return ' role="article"'
+    else:
+        return ''
+
+
+@template(
+    html,
+    dedent('''\
+        <clc-block type="richtext"{content.role_if_root}>
+            <clc-header>
+                {slot.title}
+                <clc-metadatas>
+                    {slot.metadata}
+                </clc-metadatas>
+            </clc-header>
+            {slot.body}
+        </clc-block>'''),
+    loader=TEMPLATE_LOADER)
+class ClcRichtextBlocknodeTemplate:
+    """This template is used for richtext block nodes. Note that it
+    differs (only slightly) from the template used for embedding block
+    nodes.
+    """
+    title: Slot[HtmlGenericElement]
+    metadata: Slot[ClcMetadataTemplate]
+    body: Slot[
+        ClcParagraphTemplate
+        | ClcEmbeddingBlocknodeTemplate
+        | ClcRichtextBlocknodeTemplate]
+
+    role_if_root: Content[bool] = template_field(FieldConfig(
+        transformer=_transform_block_role))
+
+    @classmethod
+    def from_document(
+            cls,
+            node: ClcDocument,
+            doc_coll: HtmlDocumentCollection
+            ) -> Self:
+        """Constructs a document template from an AST document. This is
+        a compatibility shim for when cleancopy documents were always
+        wrapped in an outer ``Document`` object instead of exposing the
+        root node directly.
+        """
+        template_instance = cls.from_ast_node(node.root, doc_coll)
+
+        # The only real compatibility issue is that we need to use the metadata
+        # from the document object instead of the node object.
+        template_instance.metadata = []
+
+        return template_instance
+
+    @classmethod
+    def from_ast_node(
+            cls,
+            node: RichtextBlockNode,
+            doc_coll: HtmlDocumentCollection
+            ) -> Self:
+        if node.title is None:
+            title = []
+        else:
+            title = [heading_factory(
+                depth=node.depth,
+                body=[ClcRichtextInlineNodeTemplate.from_ast_node(
+                        node.title, doc_coll)])]
+
+        templatified_content = []
+        for paragraph_or_node in node.content:
+            if isinstance(paragraph_or_node, Paragraph):
+                templatified_content.append(
+                    ClcParagraphTemplate.from_ast_node(
+                        paragraph_or_node, doc_coll))
+
+            elif isinstance(paragraph_or_node, EmbeddingBlockNode):
+                templatified_content.append(
+                    ClcEmbeddingBlocknodeTemplate.from_ast_node(
+                        paragraph_or_node, doc_coll))
+
+            elif isinstance(paragraph_or_node, RichtextBlockNode):
+                templatified_content.append(
+                    ClcRichtextBlocknodeTemplate.from_ast_node(
+                        paragraph_or_node, doc_coll))
+
+            else:
+                raise TypeError(
+                    'Invalid child of richtext blocknode!', paragraph_or_node)
+
+        return cls(
+            title=title,
+            metadata=[],
+            role_if_root=node.depth <= 0,
+            body=templatified_content)
+
+
+@template(
+    html,
+    dedent('''\
+        <clc-block type="embedding">
+            <clc-header>
+                {slot.title}
+                <clc-metadatas>
+                    {slot.metadata}
+                </clc-metadatas>
+            </clc-header>
+            <pre>{slot.body}</pre>
+        </clc-block>'''),
+    loader=TEMPLATE_LOADER)
+class ClcEmbeddingBlocknodeTemplate:
+    """This template is used to contain embedding block
+    nodes. Note that it differs (only slightly) from the template used
+    for richtext block nodes.
+
+    TODO: we need to support a plugin system for rendering the actual
+    embeddings, instead of always using the fallback system.
+    """
+    title: Slot[HtmlGenericElement]
+    metadata: Slot[ClcMetadataTemplate]
+    body: Slot[PlaintextTemplate]
+
+    @classmethod
+    def from_ast_node(
+            cls,
+            node: EmbeddingBlockNode,
+            doc_coll: HtmlDocumentCollection
+            ) -> Self:
+        if node.title is None:
+            title = []
+        else:
+            title = [heading_factory(
+                depth=node.depth,
+                body=[ClcRichtextInlineNodeTemplate.from_ast_node(
+                        node.title, doc_coll)])]
+
+        if node.content is None:
+            body = []
+        else:
+            body = [PlaintextTemplate(text=node.content)]
+
+        return cls(
+            title=title,
+            metadata=[],
+            body=body)
+
+
+@template(
+    html,
+    dedent('''\
+        <clc-context>
+            <clc-header>
+                <clc-metadatas>
+                    {slot.metadata}
+                </clc-metadatas>
+            </clc-header>
+            {slot.body}
+        </clc-context>'''),
+    loader=TEMPLATE_LOADER)
+class ClcRichtextInlineNodeTemplate:
+    """This is used as the outermost wrapper for inline richtext nodes.
+    Note that all text is wrapped in one of these -- including text
+    within titles -- and therefore a ``<p>`` tag cannot be used (because
+    they aren't valid within ``<h#>`` tags).
+    """
+    metadata: Slot[ClcMetadataTemplate]
+    body: Slot[HtmlTemplate | ClcRichtextInlineNodeTemplate]  # type: ignore
+
+    @classmethod
+    def from_ast_node(
+            cls,
+            node: RichtextInlineNode,
+            doc_coll: HtmlDocumentCollection
+            ) -> Self:
+        contained_content: list[
+            HtmlTemplate | ClcRichtextInlineNodeTemplate] = []
+        for content_segment in node.content:
+            if isinstance(content_segment, str):
+                contained_content.append(
+                    PlaintextTemplate(text=content_segment))
+
+            elif isinstance(content_segment, RichtextInlineNode):
+                contained_content.append(
+                    ClcRichtextInlineNodeTemplate.from_ast_node(
+                        content_segment, doc_coll))
+
+            else:
+                raise TypeError(
+                    'Invalid child of inline richtext node!', content_segment)
+
+        info = node.info
+        if info is None:
+            return cls(
+                metadata=[],
+                body=contained_content)
+
+        else:
+            return cls(
+                metadata=[],
+                body=_wrap_in_richtext_context(
+                    contained_content,
+                    cast(InlineNodeInfo, info),
+                    doc_coll=doc_coll))
+
+
+@template(
+    html,
+    '<clc-p role="paragraph">{slot.body}</clc-p>',
+    loader=TEMPLATE_LOADER)
+class ClcParagraphTemplate:
+    """As the name suggests, used for cleancopy paragraphs.
+
+    Notes:
+    ++  because we have <ul>/<ol> next to <p> within the same
+        cleancopy paragraph, and because both list tags in HTML are
+        invalid inside paragraphs, we need to use a custom tag
+    ++  this will inherit from HtmlGenericElement, which has the same
+        API surface as a normal div
+    ++  this can be styled as desired
+    """
+    body: Slot[
+        ClcRichtextInlineNodeTemplate
+        | ClcAnnotationTemplate
+        | ClcListTemplate]
+
+    @classmethod
+    def from_ast_node(
+            cls,
+            node: Paragraph,
+            doc_coll: HtmlDocumentCollection
+            ) -> Self:
+        body = []
+        for nested in node.content:
+            if isinstance(nested, RichtextInlineNode):
+                body.append(
+                    ClcRichtextInlineNodeTemplate.from_ast_node(
+                        nested, doc_coll))
+
+            elif isinstance(nested, List_):
+                body.append(
+                    ClcListTemplate.from_ast_node(nested, doc_coll))
+
+            elif isinstance(nested, Annotation):
+                body.append(
+                    ClcAnnotationTemplate.from_ast_node(nested, doc_coll))
+
+            else:
+                raise TypeError('Invalid child of paragraph!', nested)
+
+        return cls(body=body)
+
+
+@template(
+    html,
+    dedent('''\
+        <{content.tag}>
+            {slot.items}
+        </{content.tag}>'''),
+    loader=TEMPLATE_LOADER)
+class ClcListTemplate:
+    """Annotations get converted to comments.
+    """
+    tag: Content[str]
+    items: Slot[ClcListItemTemplate]
+
+    @classmethod
+    def from_ast_node(
+            cls,
+            node: List_,
+            doc_coll: HtmlDocumentCollection
+            ) -> Self:
+        if node.type_ is ListType.ORDERED:
+            tag = 'ol'
+        else:
+            tag = 'ul'
+
+        items: list[ClcListItemTemplate] = []
+        for nested in node.content:
+            items.append(ClcListItemTemplate.from_ast_node(nested, doc_coll))
+
+        return cls(
+            tag=tag,
+            items=items)
+
+
+def _transform_listitem_index(value: int | None) -> str:
+    if value is None:
+        return ''
+    else:
+        return f' value="{value}"'
+
+
+@template(
+    html,
+    '<li{content.index}>{slot.body}</li>',
+    loader=TEMPLATE_LOADER)
+class ClcListItemTemplate:
+    """Annotations get converted to comments.
+    """
+    index: Content[int | None] = template_field(FieldConfig(
+        transformer=_transform_listitem_index))
+    body: Slot[ClcParagraphTemplate]  # type: ignore
+
+    @classmethod
+    def from_ast_node(
+            cls,
+            node: ListItem,
+            doc_coll: HtmlDocumentCollection
+            ) -> Self:
+        body: list[ClcParagraphTemplate] = [
+            ClcParagraphTemplate.from_ast_node(paragraph, doc_coll)
+            for paragraph in node.content]
+
+        return cls(
+            index=node.index,
+            body=body)
+
+
+@template(
+    html,
+    '<!--{var.text}-->',
+    loader=TEMPLATE_LOADER)
+class ClcAnnotationTemplate:
+    """Annotations get converted to comments.
+    """
+    text: Var[str]
+
+    @classmethod
+    def from_ast_node(
+            cls,
+            node: Annotation,
+            doc_coll: HtmlDocumentCollection
+            ) -> Self:
+        return cls(text=node.content)
 
 
 def formatting_factory(
         spectype: InlineFormatting,
-        body: list[HtmlTemplate]
+        body: list[HtmlTemplate | ClcRichtextInlineNodeTemplate]
         ) -> HtmlGenericElement:
     if spectype is InlineFormatting.PRE:
         tag = 'code'
@@ -71,187 +426,16 @@ def formatting_factory(
         body=body)
 
 
-@singledispatch
-def templatify_node(
-        node: ASTNode,
-        *,
-        doc_coll: HtmlDocumentCollection
-        ) -> list[HtmlTemplate]:
-    raise NotImplementedError('That node type not yet supported!', node)
-
-
-@templatify_node.register
-def templatify_document(
-        node: Document,
-        *,
-        doc_coll: HtmlDocumentCollection
-        ) -> list[HtmlTemplate]:
-    sections: list[HtmlTemplate] = []
-    if node.title is not None:
-        sections.append(
-            heading_factory(
-                depth=0,
-                body=templatify_node(node.title, doc_coll=doc_coll)))
-
-    sections.extend(templatify_node(node.root, doc_coll=doc_coll))
-
-    return [
-        HtmlGenericElement(
-            tag='clc-doc',
-            body=sections,
-            attrs=[HtmlAttr(key='role', value='article')])]
-
-
-@templatify_node.register
-def templatify_richtext_block(
-        node: RichtextBlockNode,
-        *,
-        doc_coll: HtmlDocumentCollection
-        ) -> list[HtmlTemplate]:
-    body: list[HtmlTemplate] = []
-    if node.title is not None:
-        body.append(
-            heading_factory(
-                depth=node.depth,
-                body=templatify_node(node.title, doc_coll=doc_coll)))
-
-    for paragraph_or_node in node.content:
-        body.extend(templatify_node(paragraph_or_node, doc_coll=doc_coll))
-
-    # What we're trying to avoid here is **always** having nested sections
-    # within a document.
-    if node.depth > 0:
-        return [HtmlGenericElement(tag='clc-block', body=body)]
-    else:
-        return body
-
-
-@templatify_node.register
-def templatify_embedding_block(
-        node: EmbeddingBlockNode,
-        *,
-        doc_coll: HtmlDocumentCollection
-        ) -> list[HtmlTemplate]:
-    body: list[HtmlTemplate] = []
-    if node.title is not None:
-        body.append(
-            heading_factory(
-                depth=node.depth,
-                body=templatify_node(node.title, doc_coll=doc_coll)))
-    if node.content is not None:
-        body.append(
-            HtmlGenericElement(
-                tag='pre',
-                body=[PlaintextTemplate(text=node.content)]))
-
-    return [HtmlGenericElement(tag='clc-block', body=body)]
-
-
-@templatify_node.register
-def templatify_paragraph(
-        node: Paragraph,
-        *,
-        doc_coll: HtmlDocumentCollection
-        ) -> list[HtmlTemplate]:
-    body: list[HtmlTemplate] = []
-    for nested in node.content:
-        if isinstance(nested, RichtextInlineNode):
-            # We want to wrap these in standard <p> tags, and this is the
-            # only easy place to do so (especially since we use inline
-            # richtext within titles, and <p> isn't valid within <h#>)
-            body.append(
-                HtmlGenericElement(
-                    tag='p',
-                    body=templatify_node(nested, doc_coll=doc_coll)))
-
-        else:
-            body.extend(templatify_node(nested, doc_coll=doc_coll))
-
-    # Notes:
-    #   ++  because we have <ul>/<ol> next to <p> within the same cleancopy
-    #       paragraph, and because both list tags in HTML are invalid
-    #       inside paragraphs, we need to use a custom tag
-    #   ++  this will inherit from HtmlGenericElement, which has the same
-    #       API surface as a normal div
-    #   ++  this can be styled as desired
-    return [HtmlGenericElement(tag='clc-p', body=body)]
-
-
-@templatify_node.register
-def templatify_list_node(
-        node: List_,
-        *,
-        doc_coll: HtmlDocumentCollection
-        ) -> list[HtmlTemplate]:
-    body: list[HtmlTemplate] = []
-    for nested in node.content:
-        body.extend(templatify_node(nested, doc_coll=doc_coll))
-
-    if node.type_ is ListType.ORDERED:
-        tag = 'ol'
-    else:
-        tag = 'ul'
-
-    return [HtmlGenericElement(tag=tag, body=body)]
-
-
-@templatify_node.register
-def templatify_listitem_node(
-        node: ListItem,
-        *,
-        doc_coll: HtmlDocumentCollection
-        ) -> list[HtmlTemplate]:
-    body: list[HtmlTemplate] = []
-    for nested in node.content:
-        body.extend(templatify_node(nested, doc_coll=doc_coll))
-
-    return [listitem_factory(node.index, body)]
-
-
-@templatify_node.register
-def templatify_richtext_inline(
-        node: RichtextInlineNode,
-        *,
-        doc_coll: HtmlDocumentCollection
-        ) -> list[HtmlTemplate]:
-    contained_content: list[HtmlTemplate] = []
-    for content_segment in node.content:
-        if isinstance(content_segment, str):
-            contained_content.append(
-                PlaintextTemplate(text=content_segment))
-        else:
-            contained_content.extend(
-                templatify_node(content_segment, doc_coll=doc_coll))
-
-    info = node.info
-    if info is None:
-        return contained_content
-    else:
-        return _wrap_in_richtext_context(
-            contained_content,
-            cast(InlineNodeInfo, info),
-            doc_coll=doc_coll)
-
-
-@templatify_node.register
-def templatify_annotation_node(
-        node: Annotation,
-        *,
-        doc_coll: HtmlDocumentCollection
-        ) -> list[HtmlTemplate]:
-    return []
-
-
 def _wrap_in_richtext_context(
-        contained_content: list[HtmlTemplate],
+        contained_content: list[HtmlTemplate | ClcRichtextInlineNodeTemplate],
         info: InlineNodeInfo,
         *,
         doc_coll: HtmlDocumentCollection
-        ) -> list[HtmlTemplate]:
+        ) -> list[HtmlTemplate | ClcRichtextInlineNodeTemplate]:
     if info.formatting is not None:
         contained_content = [formatting_factory(
-                info.formatting,
-                contained_content)]
+            info.formatting,
+            contained_content)]
 
     if info.target is None:
         return contained_content
@@ -263,4 +447,4 @@ def _wrap_in_richtext_context(
 
         return [link_factory(
             href=href,
-            body=contained_content)]
+            body=contained_content)]  # type: ignore
