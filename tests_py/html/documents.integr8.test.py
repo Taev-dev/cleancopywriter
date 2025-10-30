@@ -64,6 +64,12 @@ def write_mismatch_to_file(tvec_name: str, result: str):
     modify the test case to use it) that catches and re-raises any
     assertion error, writing out the actual result to a file on disk
     for comparison.
+
+    > Example usage
+    __embed__: "code/python"
+        result = quickrender(tvec.clc_text)
+        with write_mismatch_to_file(tvec.name, result):
+            assert result == tvec.expected_render_result
     """
     try:
         yield

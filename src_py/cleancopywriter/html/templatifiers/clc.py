@@ -1,21 +1,34 @@
 from __future__ import annotations
 
 import typing
+from html import escape as html_escape
 from textwrap import dedent
 from typing import Self
 from typing import cast
 
 from cleancopy.ast import Annotation
+from cleancopy.ast import BlockNodeInfo
+from cleancopy.ast import BoolDataType
+from cleancopy.ast import DecimalDataType
 from cleancopy.ast import Document as ClcDocument
 from cleancopy.ast import EmbeddingBlockNode
 from cleancopy.ast import InlineNodeInfo
+from cleancopy.ast import IntDataType
 from cleancopy.ast import List_
 from cleancopy.ast import ListItem
+from cleancopy.ast import MentionDataType
+from cleancopy.ast import NodeInfo
+from cleancopy.ast import NullDataType
 from cleancopy.ast import Paragraph
+from cleancopy.ast import ReferenceDataType
 from cleancopy.ast import RichtextBlockNode
 from cleancopy.ast import RichtextInlineNode
 from cleancopy.ast import StrDataType
+from cleancopy.ast import TagDataType
+from cleancopy.ast import VariableDataType
+from cleancopy.spectypes import BlockMetadataMagic
 from cleancopy.spectypes import InlineFormatting
+from cleancopy.spectypes import InlineMetadataMagic
 from cleancopy.spectypes import ListType
 from templatey import Content
 from templatey import Slot
@@ -42,6 +55,111 @@ else:
 
 INLINE_PRE_CLASSNAME = 'clc-fmt-pre'
 UNDERLINE_TAGNAME = 'clc-ul'
+DATATYPE_NAMES = {
+    StrDataType: 'str',
+    IntDataType: 'int',
+    DecimalDataType: 'dec',
+    BoolDataType: 'bool',
+    NullDataType: 'null',
+    MentionDataType: '@',
+    TagDataType: '#',
+    VariableDataType: '%',
+    ReferenceDataType: '&',}
+
+
+def _transform_spec_metadatas_block(value: BlockNodeInfo | None) -> str:
+    if value is None:
+        return ''
+
+    spec_metadatas: dict[str, object] = {}
+    for enum_member in BlockMetadataMagic:
+        fieldname = enum_member.name
+
+        # Skip this because it's only relevant for processing the AST
+        if fieldname == 'is_doc_metadata':
+            continue
+
+        field_value = getattr(value, fieldname)
+        if field_value is not None:
+            # These are both enums that need special handling
+            if fieldname == 'formatting':
+                coerced_field_value = field_value.name.lower()
+            elif fieldname == 'fallback':
+                coerced_field_value = field_value.name.lower()
+            elif isinstance(
+                field_value,
+                MentionDataType
+                | TagDataType
+                | VariableDataType
+                | ReferenceDataType
+            ):
+                raise NotImplementedError(
+                    'Non-string link targets not yet supported for spectype '
+                    + 'metadata', fieldname)
+            else:
+                coerced_field_value = html_escape(
+                    field_value.value, quote=True)
+
+            spec_metadatas[fieldname] = coerced_field_value
+
+    # Short-circuit so that we don't get an extra space for an empty list
+    if not spec_metadatas:
+        return ''
+
+    # First empty string here is so that we get an extra space at the beginning
+    # of the list
+    to_join: list[str] = ['']
+    for fieldname in sorted(spec_metadatas):
+        coerced_fieldname = fieldname.replace('_', '-')
+        coerced_value = spec_metadatas[fieldname]
+        to_join.append(f'{coerced_fieldname}="{coerced_value}"')
+
+    return ' '.join(to_join)
+
+
+def _transform_spec_metadatas_inline(value: InlineNodeInfo | None) -> str:
+    if value is None:
+        return ''
+
+    spec_metadatas: dict[str, object] = {}
+    for enum_member in InlineMetadataMagic:
+        fieldname = enum_member.name
+
+        # Skip these because they're handled by the actual processing code
+        if fieldname in {'target', 'formatting', 'sugared'}:
+            continue
+
+        field_value = getattr(value, fieldname)
+        if field_value is not None:
+            if isinstance(
+                field_value,
+                MentionDataType
+                | TagDataType
+                | VariableDataType
+                | ReferenceDataType
+            ):
+                raise NotImplementedError(
+                    'Non-string link targets not yet supported for spectype '
+                    + 'metadata', fieldname)
+            else:
+                coerced_field_value = html_escape(
+                    field_value.value, quote=True)
+
+            spec_metadatas[fieldname] = coerced_field_value
+
+    # Short-circuit so that we don't get an extra space for an empty list
+    if not spec_metadatas:
+        return ''
+
+    # First empty string here is so that we get an extra space at the beginning
+    # of the list
+    to_join: list[str] = ['']
+    for fieldname in sorted(spec_metadatas):
+        coerced_fieldname = fieldname.replace('_', '-')
+        coerced_value = spec_metadatas[fieldname]
+        to_join.append(f'{coerced_fieldname}="{coerced_value}"')
+
+    return ' '.join(to_join)
 
 
 @template(
@@ -56,6 +174,30 @@ class ClcMetadataTemplate:
     key: Var[object]
     value: Var[object]
 
+    @classmethod
+    def from_ast_node(
+            cls,
+            node: NodeInfo,
+            doc_coll: HtmlDocumentCollection
+            ) -> list[Self]:
+        retval: list[Self] = []
+        for key, datatyped_value in node.metadata.items():
+            # Special-case the null so that we can use an empty string for the
+            # value instead of ``None``
+            if isinstance(datatyped_value, NullDataType):
+                retval.append(cls(
+                    type_=DATATYPE_NAMES[type(datatyped_value)],
+                    key=key,
+                    value=''))
+
+            else:
+                retval.append(cls(
+                    type_=DATATYPE_NAMES[type(datatyped_value)],
+                    key=key,
+                    value=html_escape(datatyped_value.value, quote=True)))
+
+        return retval
+
 
 def _transform_block_role(value: bool) -> str:
     if value:
@@ -67,7 +209,7 @@ def _transform_block_role(value: bool) -> str:
 @template(
     html,
     dedent('''\
-        <clc-block type="richtext"{content.role_if_root}>
+        <clc-block type="richtext"{content.role_if_root}{content.nodeinfo}>
             <clc-header>
                 {slot.title}
                 <clc-metadatas>
@@ -89,13 +231,15 @@ class ClcRichtextBlocknodeTemplate:
         | ClcEmbeddingBlocknodeTemplate
         | ClcRichtextBlocknodeTemplate]
 
+    nodeinfo: Content[BlockNodeInfo | None] = template_field(FieldConfig(
+        transformer=_transform_spec_metadatas_block))
     role_if_root: Content[bool] = template_field(FieldConfig(
         transformer=_transform_block_role))
 
     @classmethod
     def from_document(
             cls,
-            node: ClcDocument,
+            node: ClcDocument | RichtextBlockNode,
             doc_coll: HtmlDocumentCollection
             ) -> Self:
         """Constructs a document template from an AST document. This is
@@ -103,11 +247,19 @@ class ClcRichtextBlocknodeTemplate:
         wrapped in an outer ``Document`` object instead of exposing the
         root node directly.
         """
-        template_instance = cls.from_ast_node(node.root, doc_coll)
+        # This is a preemptive backwards-compatibility shim
+        if isinstance(node, ClcDocument):
+            template_instance = cls.from_ast_node(node.root, doc_coll)
 
-        # The only real compatibility issue is that we need to use the metadata
-        # from the document object instead of the node object.
-        template_instance.metadata = []
+            # The only real compatibility issue is that we need to use the
+            # metadata from the document object instead of the node object
+            # (but only if metadata is actually defined there)
+            if node.info is not None:
+                template_instance.metadata = ClcMetadataTemplate.from_ast_node(
+                    node.info, doc_coll)
+
+        else:
+            template_instance = cls.from_ast_node(node, doc_coll)
 
         return template_instance
 
@@ -148,15 +300,17 @@ class ClcRichtextBlocknodeTemplate:
 
         return cls(
             title=title,
-            metadata=[],
+            metadata=ClcMetadataTemplate.from_ast_node(
+                node.info, doc_coll) if node.info is not None else [],
             role_if_root=node.depth <= 0,
-            body=templatified_content)
+            body=templatified_content,
+            nodeinfo=node.info)
 
 
 @template(
     html,
     dedent('''\
-        <clc-block type="embedding">
+        <clc-block type="embedding"{content.nodeinfo}>
             <clc-header>
                 {slot.title}
                 <clc-metadatas>
@@ -177,6 +331,9 @@ class ClcEmbeddingBlocknodeTemplate:
     title: Slot[HtmlGenericElement]
     metadata: Slot[ClcMetadataTemplate]
     body: Slot[PlaintextTemplate]
+
+    nodeinfo: Content[BlockNodeInfo | None] = template_field(FieldConfig(
+        transformer=_transform_spec_metadatas_block))
 
     @classmethod
     def from_ast_node(
@@ -199,14 +356,16 @@ class ClcEmbeddingBlocknodeTemplate:
 
         return cls(
             title=title,
-            metadata=[],
-            body=body)
+            metadata=ClcMetadataTemplate.from_ast_node(
+                node.info, doc_coll) if node.info is not None else [],
+            body=body,
+            nodeinfo=node.info)
 
 
 @template(
     html,
     dedent('''\
-        <clc-context>
+        <clc-context{content.nodeinfo}>
             <clc-header>
                 <clc-metadatas>
                     {slot.metadata}
@@ -223,6 +382,9 @@ class ClcRichtextInlineNodeTemplate:
     """
     metadata: Slot[ClcMetadataTemplate]
     body: Slot[HtmlTemplate | ClcRichtextInlineNodeTemplate]  # type: ignore
+
+    nodeinfo: Content[InlineNodeInfo | None] = template_field(FieldConfig(
+        transformer=_transform_spec_metadatas_inline))
 
     @classmethod
     def from_ast_node(
@@ -250,15 +412,18 @@ class ClcRichtextInlineNodeTemplate:
         if info is None:
             return cls(
                 metadata=[],
-                body=contained_content)
+                body=contained_content,
+                nodeinfo=None)
 
         else:
             return cls(
-                metadata=[],
+                metadata=ClcMetadataTemplate.from_ast_node(
+                    node.info, doc_coll) if node.info is not None else [],
                 body=_wrap_in_richtext_context(
                     contained_content,
                     cast(InlineNodeInfo, info),
-                    doc_coll=doc_coll))
+                    doc_coll=doc_coll),
+                nodeinfo=info)
 
 
 @template(
@@ -414,6 +579,10 @@ def formatting_factory(
 
     elif spectype is InlineFormatting.STRIKE:
         tag = 's'
+        attrs = []
+
+    elif spectype is InlineFormatting.QUOTE:
+        tag = 'q'
         attrs = []
 
     else:
