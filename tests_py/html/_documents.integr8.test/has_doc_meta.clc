@@ -1,5 +1,7 @@
 > Docs can have titles too
 __doc_meta__: true
+foo: "oof"
+bar: "rab"
 <
 
 fly you fools
