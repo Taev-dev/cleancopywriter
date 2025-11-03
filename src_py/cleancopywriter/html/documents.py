@@ -34,6 +34,8 @@ from cleancopywriter._types import ClcTreeTransformer
 from cleancopywriter._types import DocumentBase
 from cleancopywriter._types import DocumentID
 from cleancopywriter._types import LinkTargetResolver
+from cleancopywriter.html.plugin_types import PluginManager
+from cleancopywriter.html.prebaked.plugins import SimplePluginManager
 from cleancopywriter.html.templatifiers.clc import ClcRichtextBlocknodeTemplate
 from cleancopywriter.html.templatifiers.docnotes import ModuleSummaryTemplate
 
@@ -87,6 +89,7 @@ class _ProxyViewDescriptor:
 @dataclass(slots=True, kw_only=True)
 class HtmlDocumentCollection[T: DocumentID, TC](Mapping[T, HtmlDocument]):
     target_resolver: LinkTargetResolver
+    plugin_manager: PluginManager = field(default_factory=SimplePluginManager)
     transformers: Annotated[
             Sequence[ClcTreeTransformer[TC]],
             Note('''Transformers can be used to modify the content of
@@ -450,13 +453,24 @@ def _apply_xform_annotation[T](
     return new_node
 
 
-def quickrender(clc_text: str) -> str:
+def quickrender(
+        clc_text: str,
+        plugin_manager: PluginManager | None = None
+        ) -> str:
     """This is a utility function, mostly intended for manual
     debugging and repl tomfoolery, that renders the passed cleancopy
     text into HTML.
     """
-    doc_coll = HtmlDocumentCollection(
-        target_resolver=lambda *args, **kwargs: '#')
+    def target_resolver(*args, **kwargs) -> str:
+        return '#'
+
+    if plugin_manager is None:
+        doc_coll = HtmlDocumentCollection(target_resolver=target_resolver)
+    else:
+        doc_coll = HtmlDocumentCollection(
+            target_resolver=target_resolver,
+            plugin_manager=plugin_manager)
+
     ast_doc = doc_coll.preprocess(clc_text=clc_text)
     template = ClcRichtextBlocknodeTemplate.from_document(
         ast_doc, doc_coll=doc_coll)

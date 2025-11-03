@@ -37,12 +37,15 @@ from docnote_extract.summaries import ParamStyle
 from docnote_extract.summaries import ParamSummary
 from docnote_extract.summaries import RetvalSummary
 from docnote_extract.summaries import SignatureSummary
+from docnote_extract.summaries import SummaryBase
 from docnote_extract.summaries import SummaryMetadataProtocol
 from docnote_extract.summaries import VariableSummary
 from templatey import Content
+from templatey import DynamicClassSlot
 from templatey import Slot
 from templatey import Var
 from templatey import template
+from templatey._types import TemplateParamsInstance
 from templatey.prebaked.template_configs import html
 from templatey.templates import FieldConfig
 from templatey.templates import template_field
@@ -81,7 +84,7 @@ class FallbackContainerTemplate:
 @template(
     html,
     dedent('''\
-        <docnote-module role="article">
+        <docnote-module role="article" {slot.plugin_attrs}>
             <docnote-header>
                 <docnote-name obj-type="module" role="heading" aria-level="1">
                     {var.fullname}
@@ -94,6 +97,7 @@ class FallbackContainerTemplate:
                 </docnote-module-dunderall>
             </docnote-header>
             {slot.members}
+            <docnote-widgets>{slot.plugin_widgets}</docnote-widgets>
         </docnote-module>
         '''),
     loader=TEMPLATE_LOADER)
@@ -104,6 +108,9 @@ class ModuleSummaryTemplate:
     # There's a bug somewhere in pyright that's saying ModuleSummaryTemplate
     # isn't actually a template params instance.
     members: Slot[NamespaceItemTemplate]  # type: ignore
+
+    plugin_attrs: Slot[HtmlAttr]
+    plugin_widgets: DynamicClassSlot
 
     @classmethod
     def from_summary(
@@ -122,6 +129,8 @@ class ModuleSummaryTemplate:
         else:
             dunder_all = dunder_all_factory(sorted(summary_node.dunder_all))
 
+        plugin_attrs, plugin_widgets = _apply_plugins(
+            doc_coll, ModuleSummary, summary_node)
         return cls(
             fullname=summary_node.name,
             docstring=docstring,
@@ -129,7 +138,9 @@ class ModuleSummaryTemplate:
             members=[
                 get_template_cls(member).from_summary(member, doc_coll)  # type: ignore
                 for member in cls.sort_members(summary_node.members)
-                if should_include(member.metadata)])  # type: ignore
+                if should_include(member.metadata)],
+            plugin_attrs=plugin_attrs,
+            plugin_widgets=plugin_widgets)
 
     @classmethod
     def sort_members(
@@ -143,7 +154,7 @@ class ModuleSummaryTemplate:
 @template(
     html,
     dedent('''\
-        <docnote-attribute>
+        <docnote-attribute {slot.plugin_attrs}>
             <docnote-header>
                 <docnote-name obj-type="attribute" role="heading" aria-level="2">
                     {var.name}
@@ -153,6 +164,7 @@ class ModuleSummaryTemplate:
             <docnote-notes>
                 {slot.notes}
             </docnote-notes>
+            <docnote-widgets>{slot.plugin_widgets}</docnote-widgets>
         </docnote-attribute>
         '''),  # noqa: E501
     loader=TEMPLATE_LOADER)
@@ -160,6 +172,9 @@ class VariableSummaryTemplate:
     name: Var[str]
     typespec: Slot[TypespecTemplate]
     notes: Slot[ClcRichtextBlocknodeTemplate | HtmlTemplate]
+
+    plugin_attrs: Slot[HtmlAttr]
+    plugin_widgets: DynamicClassSlot
 
     @classmethod
     def from_summary(
@@ -173,19 +188,23 @@ class VariableSummaryTemplate:
                 templatify_doctext(
                     note, doc_coll, summary_node.metadata))
 
+        plugin_attrs, plugin_widgets = _apply_plugins(
+            doc_coll, VariableSummary, summary_node)
         return cls(
             name=summary_node.name,
             typespec=
                 [templatify_typespec(summary_node.typespec)]
                 if summary_node.typespec is not None
                 else (),
-            notes=rendered_notes)
+            notes=rendered_notes,
+            plugin_attrs=plugin_attrs,
+            plugin_widgets=plugin_widgets)
 
 
 @template(
     html,
     dedent('''\
-        <docnote-class>
+        <docnote-class {slot.plugin_attrs}>
             <docnote-header>
                 <docnote-name obj-type="class" role="heading" aria-level="2">
                     {var.name}
@@ -205,6 +224,7 @@ class VariableSummaryTemplate:
                 </docnote-docstring>
             </docnote-header>
             {slot.members}
+            <docnote-widgets>{slot.plugin_widgets}</docnote-widgets>
         </docnote-class>
         '''),
     loader=TEMPLATE_LOADER)
@@ -216,6 +236,9 @@ class ClassSummaryTemplate:
     # There's a bug somewhere in pyright that's saying ModuleSummaryTemplate
     # isn't actually a template params instance.
     members: Slot[NamespaceItemTemplate]  # type: ignore
+
+    plugin_attrs: Slot[HtmlAttr]
+    plugin_widgets: DynamicClassSlot
 
     @classmethod
     def from_summary(
@@ -229,6 +252,8 @@ class ClassSummaryTemplate:
             docstring = templatify_doctext(
                 summary_node.docstring, doc_coll, summary_node.metadata)
 
+        plugin_attrs, plugin_widgets = _apply_plugins(
+            doc_coll, ClassSummary, summary_node)
         return cls(
             name=summary_node.name,
             metaclass=
@@ -242,7 +267,9 @@ class ClassSummaryTemplate:
             members=[
                 get_template_cls(member).from_summary(member, doc_coll)  # type: ignore
                 for member in cls.sort_members(summary_node.members)
-                if should_include(member.metadata)])  # type: ignore
+                if should_include(member.metadata)],
+            plugin_attrs=plugin_attrs,
+            plugin_widgets=plugin_widgets)
 
     @classmethod
     def sort_members(
@@ -281,7 +308,7 @@ def _transform_callable_color(value: CallableColor) -> str:
 @template(
     html,
     dedent('''\
-        <docnote-callable>
+        <docnote-callable {slot.plugin_attrs}>
             <docnote-header>
                 <docnote-name obj-type="callable" role="heading" aria-level="2">
                     {var.name}
@@ -298,6 +325,7 @@ def _transform_callable_color(value: CallableColor) -> str:
             <docnote-callable-signatures>
                 {slot.signatures}
             </docnote-callable-signatures>
+            <docnote-widgets>{slot.plugin_widgets}</docnote-widgets>
         </docnote-callable>
         '''),  # noqa: E501
     loader=TEMPLATE_LOADER)
@@ -314,6 +342,9 @@ class CallableSummaryTemplate:
 
     signatures: Slot[SignatureSummaryTemplate]
 
+    plugin_attrs: Slot[HtmlAttr]
+    plugin_widgets: DynamicClassSlot
+
     @classmethod
     def from_summary(
             cls,
@@ -326,6 +357,8 @@ class CallableSummaryTemplate:
             docstring = templatify_doctext(
                 summary_node.docstring, doc_coll, summary_node.metadata)
 
+        plugin_attrs, plugin_widgets = _apply_plugins(
+            doc_coll, CallableSummary, summary_node)
         return cls(
             name=summary_node.name,
             docstring=docstring,
@@ -336,7 +369,9 @@ class CallableSummaryTemplate:
                 SignatureSummaryTemplate.from_summary(
                     signature, doc_coll)
                 for signature in cls.sort_signatures(summary_node.signatures)
-                if should_include(signature.metadata)])
+                if should_include(signature.metadata)],
+            plugin_attrs=plugin_attrs,
+            plugin_widgets=plugin_widgets)
 
     @classmethod
     def sort_signatures(
@@ -351,7 +386,7 @@ class CallableSummaryTemplate:
 @template(
     html,
     dedent('''\
-        <docnote-callable-signature>
+        <docnote-callable-signature {slot.plugin_attrs}>
             <docnote-header>
                 <docnote-docstring obj-type="callable-signature">
                     {slot.docstring}
@@ -363,6 +398,7 @@ class CallableSummaryTemplate:
             <docnote-callable-signature-retval>
                 {slot.retval}
             </docnote-callable-signature-retval>
+            <docnote-widgets>{slot.plugin_widgets}</docnote-widgets>
         </docnote-callable-signature>
         '''),
     loader=TEMPLATE_LOADER)
@@ -370,6 +406,9 @@ class SignatureSummaryTemplate:
     params: Slot[ParamSummaryTemplate]
     retval: Slot[RetvalSummaryTemplate]
     docstring: Slot[HtmlTemplate | ClcRichtextBlocknodeTemplate]
+
+    plugin_attrs: Slot[HtmlAttr]
+    plugin_widgets: DynamicClassSlot
 
     @classmethod
     def from_summary(
@@ -383,6 +422,8 @@ class SignatureSummaryTemplate:
             docstring = templatify_doctext(
                 summary_node.docstring, doc_coll, summary_node.metadata)
 
+        plugin_attrs, plugin_widgets = _apply_plugins(
+            doc_coll, SignatureSummary, summary_node)
         return cls(
             params=[
                 ParamSummaryTemplate.from_summary(param, doc_coll)
@@ -391,7 +432,9 @@ class SignatureSummaryTemplate:
             retval=[
                 RetvalSummaryTemplate.from_summary(
                     summary_node.retval, doc_coll)],
-            docstring=docstring)
+            docstring=docstring,
+            plugin_attrs=plugin_attrs,
+            plugin_widgets=plugin_widgets)
 
     @classmethod
     def sort_params(
@@ -410,7 +453,7 @@ def _transform_param_style(value: ParamStyle) -> str:
 @template(
     html,
     dedent('''\
-        <docnote-callable-signature-param {content.style} role="listitem">
+        <docnote-callable-signature-param {content.style} role="listitem" {slot.plugin_attrs}>
             <docnote-header>
                 <docnote-name obj-type="callable-signature-param-item" role="heading" aria-level="3">
                     {var.name}
@@ -423,6 +466,7 @@ def _transform_param_style(value: ParamStyle) -> str:
             <docnote-notes>
                 {slot.notes}
             </docnote-notes>
+            <docnote-widgets>{slot.plugin_widgets}</docnote-widgets>
         </docnote-callable-signature-param>
         '''),  # noqa: E501
     loader=TEMPLATE_LOADER)
@@ -433,6 +477,9 @@ class ParamSummaryTemplate:
     typespec: Slot[TypespecTemplate]
     default: Slot[ValueReprTemplate]
     notes: Slot[HtmlTemplate | ClcRichtextBlocknodeTemplate]
+
+    plugin_attrs: Slot[HtmlAttr]
+    plugin_widgets: DynamicClassSlot
 
     @classmethod
     def from_summary(
@@ -451,6 +498,8 @@ class ParamSummaryTemplate:
             rendered_default.append(
                 ValueReprTemplate(repr(summary_node.default)))
 
+        plugin_attrs, plugin_widgets = _apply_plugins(
+            doc_coll, ParamSummary, summary_node)
         return cls(
             style=summary_node.style,
             name=summary_node.name,
@@ -458,7 +507,9 @@ class ParamSummaryTemplate:
             typespec=[templatify_typespec(summary_node.typespec)]
                 if summary_node.typespec is not None
                 else (),
-            notes=rendered_notes)
+            notes=rendered_notes,
+            plugin_attrs=plugin_attrs,
+            plugin_widgets=plugin_widgets)
 
 
 @template(
@@ -1011,3 +1062,23 @@ type NamespaceItemTemplate = (
     | VariableSummaryTemplate
     | ClassSummaryTemplate
     | CallableSummaryTemplate)
+
+
+def _apply_plugins[T: SummaryBase](
+        doc_coll: HtmlDocumentCollection,
+        summary_type: type[T],
+        summary: T
+        ) -> tuple[list[HtmlAttr], list[TemplateParamsInstance]]:
+    plugins = doc_coll.plugin_manager.get_docnotes_plugins(summary_type)
+    plugin_attrs: list[HtmlAttr] = []
+    plugin_widgets: list[TemplateParamsInstance] = []
+
+    for plugin in plugins:
+        injection = plugin(summary)
+        if injection is not None:
+            if injection.attrs is not None:
+                plugin_attrs.extend(injection.attrs)
+            if injection.widgets is not None:
+                plugin_widgets.extend(injection.widgets)
+
+    return plugin_attrs, plugin_widgets

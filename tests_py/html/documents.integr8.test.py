@@ -6,8 +6,18 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
+from cleancopy.ast import ASTNode
+from cleancopy.ast import EmbeddingBlockNode
+from cleancopy.ast import RichtextBlockNode
+from cleancopy.ast import RichtextInlineNode
 
 from cleancopywriter.html.documents import quickrender
+from cleancopywriter.html.generic_templates import HtmlAttr
+from cleancopywriter.html.generic_templates import PlaintextTemplate
+from cleancopywriter.html.plugin_types import ClcPlugin
+from cleancopywriter.html.plugin_types import EmbeddingsPlugin
+from cleancopywriter.html.plugin_types import PluginInjection
+from cleancopywriter.html.prebaked.plugins import SimplePluginManager
 
 tvec_dir = Path(__file__).parent / '_documents.integr8.test'
 
@@ -78,6 +88,35 @@ def write_mismatch_to_file(tvec_name: str, result: str):
         raise
 
 
+@dataclass
+class FakeEmbeddingsPlugin(EmbeddingsPlugin):
+    plugin_name: str
+
+    def __call__(
+            self,
+            node: EmbeddingBlockNode,
+            embedding_type: str,
+            ) -> PluginInjection | None:
+        if embedding_type.startswith('code'):
+            return PluginInjection(
+                widgets=[PlaintextTemplate(embedding_type)],
+                attrs=[HtmlAttr('with', 'attr')])
+
+
+class FakeClcPlugin(ClcPlugin):
+
+    def __call__(self, node: ASTNode) -> PluginInjection | None:
+        if (
+            isinstance(
+                node,
+                RichtextBlockNode | EmbeddingBlockNode | RichtextInlineNode)
+            and node.info is not None
+            and 'id' in node.info.metadata
+        ):
+            return PluginInjection(
+                attrs=[HtmlAttr('id', node.info.metadata['id'].value)])
+
+
 class TestHtmlWriter:
 
     @pytest.mark.parametrize(
@@ -88,6 +127,10 @@ class TestHtmlWriter:
         """Tests a number of small snippets and ensure the results match
         the expected value.
         """
-        result = quickrender(tvec.clc_text)
+        result = quickrender(
+            tvec.clc_text,
+            SimplePluginManager(
+                embeddings_plugins=[FakeEmbeddingsPlugin('myplugin1')],
+                clc_plugins=[FakeClcPlugin()]))
 
         assert result == tvec.expected_render_result
