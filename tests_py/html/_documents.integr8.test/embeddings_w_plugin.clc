@@ -1,0 +1,8 @@
+> Embeddings
+__embed__: 'code/literate'
+id: 'special-id'
+    Might have plugins
+
+> Embeddings
+__embed__: 'arbitrary'
+    Or might not

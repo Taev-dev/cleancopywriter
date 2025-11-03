@@ -7,6 +7,7 @@ from typing import Self
 from typing import cast
 
 from cleancopy.ast import Annotation
+from cleancopy.ast import ASTNode
 from cleancopy.ast import BlockNodeInfo
 from cleancopy.ast import BoolDataType
 from cleancopy.ast import DecimalDataType
@@ -31,9 +32,11 @@ from cleancopy.spectypes import InlineFormatting
 from cleancopy.spectypes import InlineMetadataMagic
 from cleancopy.spectypes import ListType
 from templatey import Content
+from templatey import DynamicClassSlot
 from templatey import Slot
 from templatey import Var
 from templatey import template
+from templatey._types import TemplateParamsInstance
 from templatey.prebaked.template_configs import html
 from templatey.templates import FieldConfig
 from templatey.templates import template_field
@@ -67,7 +70,7 @@ DATATYPE_NAMES = {
     ReferenceDataType: '&',}
 
 
-def _transform_spec_metadatas_block(value: BlockNodeInfo | None) -> str:
+def _transform_spec_metadatas_block(value: BlockNodeInfo | None) -> str:  # noqa: C901
     if value is None:
         return ''
 
@@ -110,7 +113,11 @@ def _transform_spec_metadatas_block(value: BlockNodeInfo | None) -> str:
     # of the list
     to_join: list[str] = ['']
     for fieldname in sorted(spec_metadatas):
-        coerced_fieldname = fieldname.replace('_', '-')
+        if fieldname == 'embed':
+            coerced_fieldname = 'embedding'
+        else:
+            coerced_fieldname = fieldname.replace('_', '-')
+
         coerced_value = spec_metadatas[fieldname]
         to_join.append(f'{coerced_fieldname}="{coerced_value}"')
 
@@ -209,7 +216,8 @@ def _transform_block_role(value: bool) -> str:
 @template(
     html,
     dedent('''\
-        <clc-block type="richtext"{content.role_if_root}{content.nodeinfo}>
+        <clc-block type="richtext"{content.role_if_root}{content.nodeinfo}{
+                slot.plugin_attrs: __prefix__=' '}>
             <clc-header>
                 {slot.title}
                 <clc-metadatas>
@@ -217,6 +225,7 @@ def _transform_block_role(value: bool) -> str:
                 </clc-metadatas>
             </clc-header>
             {slot.body}
+            <clc-widgets>{slot.plugin_widgets}</clc-widgets>
         </clc-block>'''),
     loader=TEMPLATE_LOADER)
 class ClcRichtextBlocknodeTemplate:
@@ -230,6 +239,9 @@ class ClcRichtextBlocknodeTemplate:
         ClcParagraphTemplate
         | ClcEmbeddingBlocknodeTemplate
         | ClcRichtextBlocknodeTemplate]
+
+    plugin_attrs: Slot[HtmlAttr]
+    plugin_widgets: DynamicClassSlot
 
     nodeinfo: Content[BlockNodeInfo | None] = template_field(FieldConfig(
         transformer=_transform_spec_metadatas_block))
@@ -298,39 +310,74 @@ class ClcRichtextBlocknodeTemplate:
                 raise TypeError(
                     'Invalid child of richtext blocknode!', paragraph_or_node)
 
+        plugin_attrs, plugin_widgets = _apply_plugins(
+            doc_coll, RichtextBlockNode, node)
         return cls(
             title=title,
             metadata=ClcMetadataTemplate.from_ast_node(
                 node.info, doc_coll) if node.info is not None else [],
             role_if_root=node.depth <= 0,
             body=templatified_content,
-            nodeinfo=node.info)
+            nodeinfo=node.info,
+            plugin_attrs=plugin_attrs,
+            plugin_widgets=plugin_widgets)
+
+
+@template(
+    html,
+    '<clc-embedding-fallback><pre>{slot.body}</pre></clc-embedding-fallback>',
+    loader=TEMPLATE_LOADER)
+class ClcEmbeddingFallbackContentTemplate:
+    """This template is used as a fallback for embeddings where there is
+    no plugin defined to handle the embedding type.
+    """
+    body: Slot[PlaintextTemplate]
+
+
+@template(
+    html,
+    '<clc-embedding-plugin plugin-name="{content.plugin_name}">{slot.body}'
+    + '</clc-embedding-plugin>',
+    loader=TEMPLATE_LOADER)
+class ClcEmbeddingPluginContentTemplate:
+    """This template is used for embeddings where a plugin is defined to
+    handle the embedding type.
+    """
+    plugin_name: Content[str]
+    body: DynamicClassSlot
 
 
 @template(
     html,
     dedent('''\
-        <clc-block type="embedding"{content.nodeinfo}>
+        <clc-block type="embedding"{content.nodeinfo}{
+                slot.plugin_attrs: __prefix__=' '}>
             <clc-header>
                 {slot.title}
                 <clc-metadatas>
                     {slot.metadata}
                 </clc-metadatas>
             </clc-header>
-            <pre>{slot.body}</pre>
+            {slot.embedding_content}
+            <clc-widgets>{slot.plugin_widgets}</clc-widgets>
         </clc-block>'''),
     loader=TEMPLATE_LOADER)
 class ClcEmbeddingBlocknodeTemplate:
     """This template is used to contain embedding block
     nodes. Note that it differs (only slightly) from the template used
     for richtext block nodes.
-
-    TODO: we need to support a plugin system for rendering the actual
-    embeddings, instead of always using the fallback system.
     """
     title: Slot[HtmlGenericElement]
     metadata: Slot[ClcMetadataTemplate]
-    body: Slot[PlaintextTemplate]
+    embedding_content: Slot[
+        ClcEmbeddingFallbackContentTemplate
+        | ClcEmbeddingPluginContentTemplate]
+
+    plugin_attrs: Slot[HtmlAttr]
+    # Note: this isn't necessarily redundant, because you might have a global
+    # widget system that modifies every node, independently of the actual
+    # embedding system.
+    plugin_widgets: DynamicClassSlot
 
     nodeinfo: Content[BlockNodeInfo | None] = template_field(FieldConfig(
         transformer=_transform_spec_metadatas_block))
@@ -349,29 +396,71 @@ class ClcEmbeddingBlocknodeTemplate:
                 body=[ClcRichtextInlineNodeTemplate.from_ast_node(
                         node.title, doc_coll)])]
 
-        if node.content is None:
-            body = []
+        plugin_attrs, plugin_widgets = _apply_plugins(
+            doc_coll, EmbeddingBlockNode, node)
+
+        if node.info is None:
+            raise TypeError(
+                'Impossible branch: embedding block node without nodeinfo!',
+                node)
+        if node.info.embed is None:
+            raise TypeError(
+                'Impossible branch: embedding block node with null '
+                + 'nodeinfo.embed!', node)
+
+        embedding_content: list[
+            ClcEmbeddingFallbackContentTemplate
+            | ClcEmbeddingPluginContentTemplate] = []
+        embedding_type = node.info.embed.value
+        embeddings_plugins = doc_coll.plugin_manager.get_embeddings_plugins(
+            embedding_type)
+        for embeddings_plugin in embeddings_plugins:
+            plugin_injection = embeddings_plugin(node, embedding_type)
+            if plugin_injection is not None:
+                if plugin_injection.widgets is None:
+                    injection_body = []
+                else:
+                    injection_body = plugin_injection.widgets
+
+                embedding_content.append(
+                    ClcEmbeddingPluginContentTemplate(
+                        plugin_name=embeddings_plugin.plugin_name,
+                        body=injection_body))
+
+                if plugin_injection.attrs is not None:
+                    plugin_attrs.extend(plugin_injection.attrs)
+
+                break
+
         else:
-            body = [PlaintextTemplate(text=node.content)]
+            if node.content is None:
+                plaintext_body = []
+            else:
+                plaintext_body = [PlaintextTemplate(text=node.content)]
+
+            embedding_content.append(ClcEmbeddingFallbackContentTemplate(
+                body=plaintext_body))
 
         return cls(
             title=title,
-            metadata=ClcMetadataTemplate.from_ast_node(
-                node.info, doc_coll) if node.info is not None else [],
-            body=body,
-            nodeinfo=node.info)
+            metadata=ClcMetadataTemplate.from_ast_node(node.info, doc_coll),
+            embedding_content=embedding_content,
+            nodeinfo=node.info,
+            plugin_attrs=plugin_attrs,
+            plugin_widgets=plugin_widgets)
 
 
 @template(
     html,
     dedent('''\
-        <clc-context{content.nodeinfo}>
+        <clc-context{content.nodeinfo}{slot.plugin_attrs: __prefix__=' '}>
             <clc-header>
                 <clc-metadatas>
                     {slot.metadata}
                 </clc-metadatas>
             </clc-header>
             {slot.body}
+            <clc-widgets>{slot.plugin_widgets}</clc-widgets>
         </clc-context>'''),
     loader=TEMPLATE_LOADER)
 class ClcRichtextInlineNodeTemplate:
@@ -382,6 +471,9 @@ class ClcRichtextInlineNodeTemplate:
     """
     metadata: Slot[ClcMetadataTemplate]
     body: Slot[HtmlTemplate | ClcRichtextInlineNodeTemplate]  # type: ignore
+
+    plugin_attrs: Slot[HtmlAttr]
+    plugin_widgets: DynamicClassSlot
 
     nodeinfo: Content[InlineNodeInfo | None] = template_field(FieldConfig(
         transformer=_transform_spec_metadatas_inline))
@@ -408,12 +500,16 @@ class ClcRichtextInlineNodeTemplate:
                 raise TypeError(
                     'Invalid child of inline richtext node!', content_segment)
 
+        plugin_attrs, plugin_widgets = _apply_plugins(
+            doc_coll, RichtextInlineNode, node)
         info = node.info
         if info is None:
             return cls(
                 metadata=[],
                 body=contained_content,
-                nodeinfo=None)
+                nodeinfo=None,
+                plugin_attrs=plugin_attrs,
+                plugin_widgets=plugin_widgets)
 
         else:
             return cls(
@@ -423,7 +519,9 @@ class ClcRichtextInlineNodeTemplate:
                     contained_content,
                     cast(InlineNodeInfo, info),
                     doc_coll=doc_coll),
-                nodeinfo=info)
+                nodeinfo=info,
+                plugin_attrs=plugin_attrs,
+                plugin_widgets=plugin_widgets)
 
 
 @template(
@@ -617,3 +715,23 @@ def _wrap_in_richtext_context(
         return [link_factory(
             href=href,
             body=contained_content)]  # type: ignore
+
+
+def _apply_plugins[T: ASTNode](
+        doc_coll: HtmlDocumentCollection,
+        node_type: type[T],
+        node: T
+        ) -> tuple[list[HtmlAttr], list[TemplateParamsInstance]]:
+    plugins = doc_coll.plugin_manager.get_clc_plugins(node_type)
+    plugin_attrs: list[HtmlAttr] = []
+    plugin_widgets: list[TemplateParamsInstance] = []
+
+    for plugin in plugins:
+        injection = plugin(node)
+        if injection is not None:
+            if injection.attrs is not None:
+                plugin_attrs.extend(injection.attrs)
+            if injection.widgets is not None:
+                plugin_widgets.extend(injection.widgets)
+
+    return plugin_attrs, plugin_widgets

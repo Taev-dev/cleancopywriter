@@ -1,0 +1,118 @@
+> The cleancopywriter plugin system
+__doc_meta__: true
+<
+
+> At a glance
+    Literate metadata is one of the key distinguishing features of the
+    cleancopy lightweight markup language. It allows you to quickly,
+    expressively, and plays-nice-with-others-ly include semi-aribitrary data
+    alongside markup.
+
+    The cleancopywriter plugin system uses cleancopy's literate metadata to
+    let developers extend the final rendered output with arbitrary html widgets
+    and additional html attributes.
+
+    Additionally, it's possible to write plugins that completely customize the
+    display of embeddings. This can, of course, be used to solve traditional
+    documentation tasks (like implementing syntax highlighting for code blocks),
+    but it can also be used to create dynamic server-side-rendered widgets,
+    embed external resources (ex embedding a video player), and much more.
+
+> How it works
+    Every ``HtmlDocumentCollection`` can be passed a plugin manager instance.
+    The plugin manager is responsible for determining which plugins are
+    applicable for a particular cleancopy node type, embedding type, or
+    docnotes summary type.
+
+    Cleancopywriter ships with a prebaked ``SimplePluginManager``. This is,
+    as the name suggests, a simple plugin management system that separates
+    the plugins based on their domain (cleancopy nodes, embeddings, and
+    docnotes summaries), but otherwise performs no filtering, instead assuming
+    that all plugins for each domain are valid for all nodes in that domain.
+
+    If you want a more discerning plugin manager, you should implement your
+    own (see ``cleancopywriter.html.plugin_types`` for the required
+    ``PluginManager`` protocol).
+
+    While converting individual cleancopy documents or docnotes summaries to
+    templates, cleancopywriter will first check to see which plugin(s) are
+    relevant to that particular node or summary (by calling the respective
+    method on the plugin manager). Then, it will call the plugins themselves,
+    allowing them to inject html attributes and/or custom widgets into the
+    resulting template tree.
+
+> Example: custom plugin manager that only responds with code embeddings
+__embed__: 'code/python'
+    from collections.abc import Sequence
+    from dataclasses import dataclass
+    from dataclasses import field
+
+    from cleancopy.ast import ASTNode
+    from docnote_extract.summaries import SummaryBase
+
+    from cleancopywriter.html.plugin_types import ClcPlugin
+    from cleancopywriter.html.plugin_types import DocnotesPlugin
+    from cleancopywriter.html.plugin_types import EmbeddingsPlugin
+    from cleancopywriter.html.plugin_types import PluginManager
+
+
+    @dataclass(slots=True)
+    class ExamplePluginManager(PluginManager):
+        """Returns an embeddings plugin if the embedding type started
+        with the word "code"; otherwise, returns an empty list.
+        """
+        code_types: dict[str, EmbeddingsPlugin]
+
+        def get_clc_plugins(
+                self,
+                node_type: type[ASTNode]
+                ) -> Sequence[ClcPlugin]:
+            return []
+
+        def get_docnotes_plugins(
+                self,
+                summary_type: type[SummaryBase]
+                ) -> Sequence[DocnotesPlugin]:
+            return []
+
+        def get_embeddings_plugins(
+                self,
+                embedding_type: str
+                ) -> Sequence[EmbeddingsPlugin]:
+            if embedding_type.startswith('code'):
+                _, _, lang = embedding_type.split('/')
+                return self.code_types.get(lang, ())
+
+
+> Example: "code highlighting" plugin
+__embed__: 'code/python'
+    from dataclasses import dataclass
+
+    from cleancopy.ast import EmbeddingBlockNode
+    from pygments import highlight
+    from pygments.lexers import PythonLexer
+    from pygments.formatters import HtmlFormatter
+
+    from cleancopywriter.html.generic_templates import HtmlGenericElement
+    from cleancopywriter.html.generic_templates import PlaintextTemplate
+    from cleancopywriter.html.plugin_types import EmbeddingsPlugin
+    from cleancopywriter.html.plugin_types import PluginInjection
+
+
+    @dataclass
+    class FakeEmbeddingsPlugin(EmbeddingsPlugin):
+        plugin_name: str
+
+        def __call__(
+                self,
+                node: EmbeddingBlockNode,
+                embedding_type: str,
+                ) -> PluginInjection | None:
+            if node.content is None:
+                return None
+
+            return PluginInjection(
+                widgets=[self.highlight_code(node.content)])
+
+        def highlight_code(self, code: str) -> HtmlGenericElement:
+            ...
