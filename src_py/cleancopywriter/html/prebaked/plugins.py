@@ -41,6 +41,6 @@ class SimplePluginManager(PluginManager):
 
     def get_embeddings_plugins(
             self,
-            embed_type: str
+            embedding_type: str
             ) -> Sequence[EmbeddingsPlugin]:
         return self.embeddings_plugins

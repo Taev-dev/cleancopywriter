@@ -24,18 +24,36 @@ class PluginManager(Protocol):
                     the string value that was passed under the
                     ``__embed__`` key in the cleancopy node.''')]
             ) -> Sequence[EmbeddingsPlugin]:
+        """Returns an (ordered!) sequence of embeddings plugins that
+        should be applied to the passed embedding type. The first one
+        that returns a non-None injection will be applied,
+        short-circuiting the rest.
+        """
         ...
 
     def get_clc_plugins(
             self,
             node_type: type[ASTNode]
             ) -> Sequence[ClcPlugin]:
+        """Returns an (ordered!) sequence of cleancopy node plugins that
+        should be applied to the passed cleancopy AST node type. These
+        are addative; multiple injections from different plugins are
+        allowed to stack on the node.
+
+        Note that not all node types support plugins; see the templates
+        in ``cleancopywriter.html.templatifiers.clc`` for reference.
+        """
         ...
 
     def get_docnotes_plugins(
             self,
             summary_type: type[SummaryBase]
             ) -> Sequence[DocnotesPlugin]:
+        """Returns an (ordered!) sequence of docnotes summary plugins
+        that should be applied to the passed docnotes summary type.
+        These are addative; multiple injections from different plugins
+        are allowed to stack on the summary.
+        """
         ...
 
 
